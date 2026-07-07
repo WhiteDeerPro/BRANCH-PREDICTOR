@@ -215,12 +215,14 @@ make trace TRACE_DBG_CYCLES=80
 make trace TRACE_DBG_CYCLES=0
 ```
 
-Mermaid branch-pattern diagrams:
+Mermaid branch-pattern diagrams are written to `MERMAID_OUT`, defaulting to
+`sim/01/branch_pattern_<pattern>.txt`:
 
 ```bash
 make mermaid MERMAID_PATTERN=loop MERMAID_WORKSET=6 MERMAID_STEPS=12
 make mermaid MERMAID_PATTERN=correlated MERMAID_WORKSET=8 MERMAID_STEPS=12
 make mermaid MERMAID_PATTERN=mixed MERMAID_WORKSET=10 MERMAID_STEPS=18 MERMAID_DEEP_LEN=6
+make mermaid MERMAID_PATTERN=mixed MERMAID_OUT=sim/01/mixed_mermaid.txt
 ```
 
 See `docs/branch_pattern_mermaid.md` for static program-space arrows and red
