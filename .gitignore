@@ -1,0 +1,28 @@
+# Simulation outputs
+sim/01/
+simv*
+csrc*
+*.log
+*.key
+*.vpd
+*.vdb
+*.fsdb
+inter.fsdb*
+.inter.fsdb.tbsim
+.vcs_checkpoint_shared_memory.*
+
+# Verdi / Novas generated files
+verdiLog/
+novas.*
+BSS*.log
+DVEfiles/
+
+# Generated traces
+sim/tb/traces/*.trace
+
+# Editor / OS noise
+*~
+.DS_Store
+
+# Local Git metadata fallback for environments with a read-only .git mount
+.git-local/
