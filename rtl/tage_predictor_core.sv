@@ -11,6 +11,8 @@ module tage_predictor_core #(
     parameter int NUM_TABLES       = tage_pkg::NUM_TABLES,
     parameter int TAG_CTR_W        = tage_pkg::TAG_CTR_W,
     parameter int TAG_USE_W        = tage_pkg::TAG_USE_W,
+    parameter int PREDICT_LATENCY  = 1,
+    parameter int AGE_INTERVAL     = 4096,
     // 从 package 继承 LUT 参数
     parameter bit [NUM_TABLES*32-1:0] HIST_LENS_LUT     = tage_pkg::HIST_LENS_LUT,
     parameter bit [NUM_TABLES*32-1:0] TABLE_ENTRIES_LUT = tage_pkg::TABLE_ENTRIES_LUT,
@@ -31,7 +33,7 @@ module tage_predictor_core #(
     input  logic [$bits(tage_pkg::tage_snap_t)-1:0]   i_input_snap_bus,
     output logic [$bits(tage_pkg::tage_snap_t)-1:0]   o_output_snap_bus,
     
- 
+    output logic                                      o_pred_vld,
     output logic                                      o_pred_taken,
     output logic                                      o_pred_wrong
 );
@@ -57,10 +59,16 @@ module tage_predictor_core #(
     logic [TAG_USE_W-1:0]                   provider_useful, alt_useful, alloc_useful;
     logic [MAX_TAG_WIDTH-1:0]               provider_tag, alt_tag, alloc_tag;
 
-    logic [BIMODAL_IDX_W-1:0]               bimodal_idx;
+    logic [BIMODAL_IDX_W-1:0]               bimodal_idx_raw;
+    logic [BIMODAL_IDX_W-1:0]               bimodal_idx_lookup;
     logic [BIMODAL_CTR_W-1:0]               bimodal_ctr;
 
-    logic [MAX_TAG_WIDTH-1:0]               hash_regs_pack [NUM_TABLES];
+    logic [NUM_TABLES-1:0][MAX_TAG_WIDTH-1:0] hash_regs_raw;
+    logic [NUM_TABLES-1:0][MAX_TAG_WIDTH-1:0] hash_regs_lookup;
+    logic [NUM_TABLES-1:0][MAX_IDX_WIDTH-1:0] tage_idx_raw;
+    logic [NUM_TABLES-1:0][MAX_TAG_WIDTH-1:0] tage_tag_raw;
+    logic [NUM_TABLES-1:0][MAX_IDX_WIDTH-1:0] tage_idx_lookup_raw;
+    logic [NUM_TABLES-1:0][MAX_TAG_WIDTH-1:0] tage_tag_lookup_raw;
 
     logic [MAX_TAG_WIDTH-1:0]               tag_tables    [NUM_TABLES];
     logic [TAG_CTR_W-1:0]                   ctr_tables    [NUM_TABLES];
@@ -76,6 +84,16 @@ module tage_predictor_core #(
     logic                                   do_alloc;
     logic [TAG_CTR_W-1:0]                   calc_provider_ctr;
     logic [TAG_USE_W-1:0]                   calc_provider_useful;
+    logic                                   predict_lookup_vld;
+    logic                                   predict_decision_vld;
+    logic                                   pred_taken_decision;
+
+    logic [GHR_LEN-1:0]                     specu_ghr_lookup_raw;
+    logic [GHR_LEN-1:0]                     specu_ghr_lookup_ctx;
+
+    localparam int AGE_COUNTER_W = (AGE_INTERVAL <= 1) ? 1 : $clog2(AGE_INTERVAL);
+    logic [AGE_COUNTER_W-1:0]               age_counter;
+    logic                                   age_tick;
 
     tage_snap_t snap_in, snap_out;
 
@@ -126,14 +144,13 @@ module tage_predictor_core #(
 
 	
     logic [GHR_LEN-1:0] commit_ghr_resolve;
-    logic [GHR_LEN-1:0] specu_ghr_lookup;
     logic [GHR_LEN-1:0] specu_ghr_next;
 
     always_comb begin
         commit_ghr_resolve = {ghr_restore[GHR_LEN-2:0], actual_taken_restore};
-        specu_ghr_lookup   = pred_wrong_int ? commit_ghr_resolve : specu_ghr;
-        specu_ghr_next     = i_predict_vld ? {specu_ghr_lookup[GHR_LEN-2:0], o_pred_taken} :
-                                             specu_ghr_lookup;
+        specu_ghr_lookup_raw = pred_wrong_int ? commit_ghr_resolve : specu_ghr;
+        specu_ghr_next       = predict_decision_vld ? {specu_ghr_lookup_ctx[GHR_LEN-2:0], pred_taken_decision} :
+                                                       specu_ghr_lookup_raw;
     end
 
     always_ff @(posedge i_clk or negedge i_rst_n) begin
@@ -143,10 +160,32 @@ module tage_predictor_core #(
         end else begin
             if (update_vld)
                 commit_ghr <= commit_ghr_resolve;
-            if (pred_wrong_int || i_predict_vld)
+            if (pred_wrong_int || predict_decision_vld)
                 specu_ghr <= specu_ghr_next;
         end
     end
+
+    generate
+        if (AGE_INTERVAL <= 0) begin : GEN_NO_AGING
+            assign age_tick = 1'b0;
+            always_ff @(posedge i_clk or negedge i_rst_n) begin
+                if (!i_rst_n)
+                    age_counter <= '0;
+                else
+                    age_counter <= '0;
+            end
+        end else begin : GEN_USEFUL_AGING
+            assign age_tick = (age_counter == AGE_INTERVAL-1);
+            always_ff @(posedge i_clk or negedge i_rst_n) begin
+                if (!i_rst_n)
+                    age_counter <= '0;
+                else if (age_tick)
+                    age_counter <= '0;
+                else
+                    age_counter <= age_counter + 1'b1;
+            end
+        end
+    endgenerate
 
 
 
@@ -159,7 +198,7 @@ module tage_predictor_core #(
             fold_pc_bimodal[(b-2) % BIMODAL_IDX_W] = fold_pc_bimodal[(b-2) % BIMODAL_IDX_W] ^ pc[b];
     endfunction
 
-    assign bimodal_idx = fold_pc_bimodal(i_pc);
+    assign bimodal_idx_raw = fold_pc_bimodal(i_pc);
 
     logic [BIMODAL_CTR_W-1:0] bimodal_wr_data;
     logic [BIMODAL_IDX_W-1:0] bimodal_wr_addr;
@@ -182,9 +221,54 @@ module tage_predictor_core #(
         .i_wr_en   (bimodal_wr_en),
         .i_wr_addr (bimodal_wr_addr),
         .i_wr_data (bimodal_wr_data),
-        .i_rd_addr (bimodal_idx),
+        .i_rd_addr (bimodal_idx_lookup),
         .o_rd_data (bimodal_ctr)
     );
+
+    generate
+        if (PREDICT_LATENCY == 0) begin : GEN_LOOKUP_DIRECT
+            assign predict_lookup_vld  = i_predict_vld;
+            assign bimodal_idx_lookup  = bimodal_idx_raw;
+            assign specu_ghr_lookup_ctx = specu_ghr_lookup_raw;
+            assign tage_idx_lookup_raw = tage_idx_raw;
+            assign tage_tag_lookup_raw = tage_tag_raw;
+            assign hash_regs_lookup    = hash_regs_raw;
+            assign predict_decision_vld = i_predict_vld;
+        end else begin : GEN_LOOKUP_REGISTERED
+            logic lookup_vld_q;
+            logic [BIMODAL_IDX_W-1:0]                 bimodal_idx_q;
+            logic [GHR_LEN-1:0]                       specu_ghr_lookup_q;
+            logic [NUM_TABLES-1:0][MAX_IDX_WIDTH-1:0] tage_idx_q;
+            logic [NUM_TABLES-1:0][MAX_TAG_WIDTH-1:0] tage_tag_q;
+            logic [NUM_TABLES-1:0][MAX_TAG_WIDTH-1:0] hash_regs_q;
+
+            always_ff @(posedge i_clk or negedge i_rst_n) begin
+                if (!i_rst_n) begin
+                    lookup_vld_q       <= 1'b0;
+                    bimodal_idx_q      <= '0;
+                    specu_ghr_lookup_q <= '0;
+                    tage_idx_q         <= '0;
+                    tage_tag_q         <= '0;
+                    hash_regs_q        <= '0;
+                end else begin
+                    lookup_vld_q       <= pred_wrong_int ? 1'b0 : i_predict_vld;
+                    bimodal_idx_q      <= bimodal_idx_raw;
+                    specu_ghr_lookup_q <= specu_ghr_lookup_raw;
+                    tage_idx_q         <= tage_idx_raw;
+                    tage_tag_q         <= tage_tag_raw;
+                    hash_regs_q        <= hash_regs_raw;
+                end
+            end
+
+            assign predict_lookup_vld   = lookup_vld_q;
+            assign bimodal_idx_lookup   = bimodal_idx_q;
+            assign specu_ghr_lookup_ctx = specu_ghr_lookup_q;
+            assign tage_idx_lookup_raw  = tage_idx_q;
+            assign tage_tag_lookup_raw  = tage_tag_q;
+            assign hash_regs_lookup     = hash_regs_q;
+            assign predict_decision_vld = lookup_vld_q && !pred_wrong_int;
+        end
+    endgenerate;
 
     // =========================================================================
     // TAGE 表 generate 块
@@ -202,7 +286,8 @@ module tage_predictor_core #(
             logic [V_TAG_WIDTH-1:0] commit_hash_reg;
             logic [V_TAG_WIDTH-1:0] specu_hash_reg;
             logic [V_TAG_WIDTH-1:0] commit_hash_resolve;
-            logic [V_TAG_WIDTH-1:0] specu_hash_lookup;
+            logic [V_TAG_WIDTH-1:0] specu_hash_lookup_raw;
+            logic [V_TAG_WIDTH-1:0] specu_hash_lookup_ctx;
             logic [V_TAG_WIDTH-1:0] specu_hash_next;
 
             function automatic logic [V_TAG_WIDTH-1:0] fold_hash(
@@ -234,11 +319,12 @@ module tage_predictor_core #(
             assign commit_hash_resolve = fold_hash(local_hash_restore,
                                                     ghr_restore[V_HIST_LEN-1],
                                                     actual_taken_restore);
-            assign specu_hash_lookup   = pred_wrong_int ? commit_hash_resolve : specu_hash_reg;
-            assign specu_hash_next     = i_predict_vld ? fold_hash(specu_hash_lookup,
-                                                                    specu_ghr_lookup[V_HIST_LEN-1],
-                                                                    o_pred_taken) :
-                                                        specu_hash_lookup;
+            assign specu_hash_lookup_raw = pred_wrong_int ? commit_hash_resolve : specu_hash_reg;
+            assign specu_hash_lookup_ctx = hash_regs_lookup[t][V_TAG_WIDTH-1:0];
+            assign specu_hash_next       = predict_decision_vld ? fold_hash(specu_hash_lookup_ctx,
+                                                                            specu_ghr_lookup_ctx[V_HIST_LEN-1],
+                                                                            pred_taken_decision) :
+                                                                  specu_hash_lookup_raw;
 
             always_ff @(posedge i_clk or negedge i_rst_n) begin
                 if (!i_rst_n) begin
@@ -247,37 +333,50 @@ module tage_predictor_core #(
                 end else begin
                     if (update_vld)
                         commit_hash_reg <= commit_hash_resolve;
-                    if (pred_wrong_int || i_predict_vld)
+                    if (pred_wrong_int || predict_decision_vld)
                         specu_hash_reg <= specu_hash_next;
                 end
             end
 
             logic [V_IDX_WIDTH-1:0] local_idx_raw;
             logic [V_TAG_WIDTH-1:0] local_tag_raw;
+            logic [V_IDX_WIDTH-1:0] local_idx_lookup;
+            logic [V_TAG_WIDTH-1:0] local_tag_lookup;
             logic [V_IDX_WIDTH-1:0] local_pc_idx_fold;
             logic [V_TAG_WIDTH-1:0] local_pc_tag_fold;
             assign local_pc_idx_fold = fold_pc_idx(i_pc);
             assign local_pc_tag_fold = fold_pc_tag(i_pc);
-            assign local_idx_raw = local_pc_idx_fold ^ specu_hash_lookup[V_IDX_WIDTH-1:0];
-            assign local_tag_raw = local_pc_tag_fold ^ specu_hash_lookup;
+            assign local_idx_raw = local_pc_idx_fold ^ specu_hash_lookup_raw[V_IDX_WIDTH-1:0];
+            assign local_tag_raw = local_pc_tag_fold ^ specu_hash_lookup_raw;
+            assign local_idx_lookup = tage_idx_lookup_raw[t][V_IDX_WIDTH-1:0];
+            assign local_tag_lookup = tage_tag_lookup_raw[t][V_TAG_WIDTH-1:0];
 
             wire [MAX_IDX_WIDTH-1:0] table_idx = {{(MAX_IDX_WIDTH-V_IDX_WIDTH){1'b0}}, local_idx_raw};
+            wire [MAX_IDX_WIDTH-1:0] table_idx_lookup = {{(MAX_IDX_WIDTH-V_IDX_WIDTH){1'b0}}, local_idx_lookup};
 
             wire [V_RAM_WIDTH-1:0] ram_data;
+            logic                     wr_update_en_local;
+            logic                     wr_age_en_local;
             logic                     wr_en_local;
             logic [V_IDX_WIDTH-1:0]   wr_addr_local;
             logic [V_RAM_WIDTH-1:0]   wr_data_local;
+            wire [V_TAG_WIDTH-1:0]    raw_sampled_tag;
+            wire [TAG_CTR_W-1:0]      raw_sampled_ctr;
+            wire [TAG_USE_W-1:0]      raw_sampled_useful;
 
             logic [TAG_CTR_W-1:0] init_alloc_ctr;
 
             assign init_alloc_ctr = actual_taken_restore ? {1'b1,{(TAG_CTR_W-1){1'b0}}} : { 1'b0, {(TAG_CTR_W-1){1'b1}}};
 
-            assign wr_en_local = update_vld && ((t == provider_id_restore) ||
-                                 (do_alloc && alloc_vld_restore && t == alloc_id_restore));
+            assign wr_update_en_local = update_vld && ((t == provider_id_restore) ||
+                                        (do_alloc && alloc_vld_restore && t == alloc_id_restore));
+            assign wr_age_en_local = age_tick && predict_lookup_vld && !wr_update_en_local &&
+                                     (raw_sampled_useful != '0);
+            assign wr_en_local = wr_update_en_local || wr_age_en_local;
 
             assign wr_addr_local = (t == provider_id_restore)                     ? provider_idx_restore[V_IDX_WIDTH-1:0] :
                                    (t == alloc_id_restore && do_alloc && alloc_vld_restore) ? alloc_idx_restore[V_IDX_WIDTH-1:0] :
-                                   '0;
+                                   local_idx_lookup;
 
             assign wr_data_local = (t == provider_id_restore)                     ? { provider_tag_restore[V_TAG_WIDTH-1:0],
                                                                                        calc_provider_ctr,
@@ -285,7 +384,7 @@ module tage_predictor_core #(
                                    (t == alloc_id_restore && do_alloc && alloc_vld_restore) ? { alloc_tag_restore[V_TAG_WIDTH-1:0],
                                                                                        init_alloc_ctr,
                                                                                        {TAG_USE_W{1'b0}} } :
-                                   '0;
+                                   { raw_sampled_tag, raw_sampled_ctr, raw_sampled_useful - 1'b1 };
 
             tage_ram_wr #(
                 .DEPTH(V_ENTRIES),
@@ -295,13 +394,9 @@ module tage_predictor_core #(
                 .i_wr_en   (wr_en_local),
                 .i_wr_addr (wr_addr_local),
                 .i_wr_data (wr_data_local),
-                .i_rd_addr (local_idx_raw),
+                .i_rd_addr (local_idx_lookup),
                 .o_rd_data (ram_data)
             );
-
-            wire [V_TAG_WIDTH-1:0] raw_sampled_tag;
-            wire [TAG_CTR_W-1:0]   raw_sampled_ctr;
-            wire [TAG_USE_W-1:0]   raw_sampled_useful;
 
             assign raw_sampled_tag    = ram_data[V_RAM_WIDTH-1 -: V_TAG_WIDTH];
             assign raw_sampled_ctr    = ram_data[TAG_CTR_W+TAG_USE_W-1 -: TAG_CTR_W];
@@ -312,14 +407,16 @@ module tage_predictor_core #(
             assign useful_tables[t] = raw_sampled_useful;
 
             wire hit;
-            assign hit = (tag_tables[t] == local_tag_raw);
+            assign hit = predict_lookup_vld && (tag_tables[t] == local_tag_lookup);
 
             assign tage_hit[t]       = hit;
-            assign tage_idx[t]       = table_idx;
+            assign tage_idx[t]       = table_idx_lookup;
             assign tage_ctr[t]       = ctr_tables[t];
             assign tage_useful[t]    = useful_tables[t];
-            assign tage_tag[t]       = {{(MAX_TAG_WIDTH-V_TAG_WIDTH){1'b0}}, local_tag_raw};
-            assign hash_regs_pack[t]        = {{(MAX_TAG_WIDTH-V_TAG_WIDTH){1'b0}}, specu_hash_lookup};
+            assign tage_tag[t]       = {{(MAX_TAG_WIDTH-V_TAG_WIDTH){1'b0}}, local_tag_lookup};
+            assign tage_idx_raw[t]   = table_idx;
+            assign tage_tag_raw[t]   = {{(MAX_TAG_WIDTH-V_TAG_WIDTH){1'b0}}, local_tag_raw};
+            assign hash_regs_raw[t]  = {{(MAX_TAG_WIDTH-V_TAG_WIDTH){1'b0}}, specu_hash_lookup_raw};
         end
     endgenerate
 
@@ -329,13 +426,13 @@ module tage_predictor_core #(
     always_comb begin
         provider_id     = NUM_TABLES;
         provider_tag    = '0;
-        provider_idx    = bimodal_idx;
+        provider_idx    = bimodal_idx_lookup;
         provider_ctr    = bimodal_ctr;
         provider_useful = '0;
 
         alt_id          = NUM_TABLES;
         alt_tag         = '0;
-        alt_idx         = bimodal_idx;
+        alt_idx         = bimodal_idx_lookup;
         alt_ctr         = bimodal_ctr;
         alt_useful      = '0;
 
@@ -386,19 +483,19 @@ module tage_predictor_core #(
     // =========================================================================
     always_comb begin
         if (provider_id == NUM_TABLES)
-            o_pred_taken = bimodal_ctr[BIMODAL_CTR_W-1];
+            pred_taken_decision = bimodal_ctr[BIMODAL_CTR_W-1];
         else
-            o_pred_taken = provider_ctr[TAG_CTR_W-1];
+            pred_taken_decision = provider_ctr[TAG_CTR_W-1];
     end
 
     // =========================================================================
     // 快照打包
     // =========================================================================
     always_comb begin
-        snap_out.pred_taken          = o_pred_taken;
+        snap_out.pred_taken          = pred_taken_decision;
         snap_out.actual_taken        = 1'b0;
         
-        snap_out.ghr                 = specu_ghr_lookup;
+        snap_out.ghr                 = specu_ghr_lookup_ctx;
         snap_out.provider_tag        = provider_tag;
         snap_out.provider_idx        = provider_idx;
         snap_out.provider_ctr        = provider_ctr;
@@ -417,9 +514,40 @@ module tage_predictor_core #(
         snap_out.alloc_vld           = alloc_vld;
         
         for (int t = 0; t < NUM_TABLES; t++)
-            snap_out.hash_regs[t]    = hash_regs_pack[t];
+            snap_out.hash_regs[t]    = hash_regs_lookup[t];
     end
-    assign o_output_snap_bus = snap_out;
+
+    generate
+        if (PREDICT_LATENCY == 2) begin : GEN_OUTPUT_REGISTER
+            logic pred_vld_q;
+            logic pred_taken_q;
+            logic [$bits(tage_pkg::tage_snap_t)-1:0] snap_bus_q;
+
+            always_ff @(posedge i_clk or negedge i_rst_n) begin
+                if (!i_rst_n) begin
+                    pred_vld_q   <= 1'b0;
+                    pred_taken_q <= 1'b0;
+                    snap_bus_q   <= '0;
+                end else if (pred_wrong_int) begin
+                    pred_vld_q   <= 1'b0;
+                    pred_taken_q <= 1'b0;
+                    snap_bus_q   <= '0;
+                end else begin
+                    pred_vld_q   <= predict_decision_vld;
+                    pred_taken_q <= pred_taken_decision;
+                    snap_bus_q   <= snap_out;
+                end
+            end
+
+            assign o_pred_vld         = pred_vld_q;
+            assign o_pred_taken       = pred_taken_q;
+            assign o_output_snap_bus  = snap_bus_q;
+        end else begin : GEN_OUTPUT_DIRECT
+            assign o_pred_vld         = predict_decision_vld;
+            assign o_pred_taken       = pred_taken_decision;
+            assign o_output_snap_bus  = snap_out;
+        end
+    endgenerate
 
     // =========================================================================
     // 更新路径组合逻辑

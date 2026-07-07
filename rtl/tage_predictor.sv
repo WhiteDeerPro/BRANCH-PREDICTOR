@@ -6,12 +6,14 @@
 
 module tage_predictor #(
     parameter int PIPELINE_DEPTH   = 11,
+    parameter int CORE_LATENCY     = 1,
     parameter int GHR_LEN          = tage_pkg::GHR_LEN,
     parameter int BIMODAL_SIZE     = tage_pkg::BIMODAL_SIZE,
     parameter int BIMODAL_CTR_W    = tage_pkg::BIMODAL_CTR_W,
     parameter int NUM_TABLES       = tage_pkg::NUM_TABLES,
     parameter int TAG_CTR_W        = tage_pkg::TAG_CTR_W,
     parameter int TAG_USE_W        = tage_pkg::TAG_USE_W,
+    parameter int AGE_INTERVAL     = 4096,
     parameter bit [NUM_TABLES*32-1:0] HIST_LENS_LUT     = tage_pkg::HIST_LENS_LUT,
     parameter bit [NUM_TABLES*32-1:0] TABLE_ENTRIES_LUT = tage_pkg::TABLE_ENTRIES_LUT,
     parameter bit [NUM_TABLES*8-1:0]  TAG_WIDTH_LUT     = tage_pkg::TAG_WIDTH_LUT
@@ -25,13 +27,17 @@ module tage_predictor #(
     // Resolved outcome aligned with the wrapper delay pipe.
     input  logic        i_actual_taken,
 
+    output logic        o_pred_vld,
     output logic        o_pred_taken
 );
     import tage_pkg::*;
 
+    localparam int FEEDBACK_DEPTH = PIPELINE_DEPTH - CORE_LATENCY;
+
     logic                      is_taken_vld;
     logic                      resolve_wrong;
     logic                      flush_younger;
+    logic                      core_pred_vld;
 
     tage_snap_t snap_to_core, snap_from_core;
     logic is_snap_vld;
@@ -40,54 +46,70 @@ module tage_predictor #(
     assign flush_younger = resolve_wrong && is_snap_vld;
 
     generate
-        if (PIPELINE_DEPTH == 0) begin : GEN_PIPELINE_DIRECT
+        if (PIPELINE_DEPTH == 0) begin : GEN_UPDATE_DIRECT
             assign is_taken_vld   = i_is_taken_vld;
-            assign is_snap_vld    = i_is_taken_vld;
-            assign snap_to_core    = snap_from_core;
         end else begin : GEN_PIPELINE_REGISTERS
             logic [PIPELINE_DEPTH-1:0] taken_vld_pipe;
-            logic [PIPELINE_DEPTH-1:0] snap_vld_pipe;
-            tage_snap_t                snap_pipe [0:PIPELINE_DEPTH-1];
 
             if (PIPELINE_DEPTH == 1) begin : GEN_ONE_STAGE
                 always_ff @(posedge i_clk or negedge i_rst_n) begin
-                    if (!i_rst_n) begin
+                    if (!i_rst_n)
                         taken_vld_pipe <= '0;
-                        snap_vld_pipe  <= '0;
-                        snap_pipe[0]   <= '0;
-                    end else begin
+                    else
                         taken_vld_pipe[0] <= i_is_taken_vld;
-                        snap_vld_pipe[0]  <= i_is_taken_vld;
-                        snap_pipe[0]      <= snap_from_core;
-                    end
                 end
             end else begin : GEN_MULTI_STAGE
                 always_ff @(posedge i_clk or negedge i_rst_n) begin
-                    if (!i_rst_n) begin
+                    if (!i_rst_n)
                         taken_vld_pipe <= '0;
-                        snap_vld_pipe  <= '0;
-                        for (int i = 0; i < PIPELINE_DEPTH; i++) begin
-                            snap_pipe[i] <= '0;
-                        end
-                    end else begin
+                    else
                         taken_vld_pipe  <= {taken_vld_pipe[PIPELINE_DEPTH-2:0], i_is_taken_vld};
-                        if (flush_younger)
-                            snap_vld_pipe <= {{(PIPELINE_DEPTH-1){1'b0}}, i_is_taken_vld};
-                        else
-                            snap_vld_pipe <= {snap_vld_pipe[PIPELINE_DEPTH-2:0], i_is_taken_vld};
-
-                        snap_pipe[0] <= snap_from_core;
-                        for (int i = 1; i < PIPELINE_DEPTH; i++) begin
-                            snap_pipe[i] <= snap_pipe[i-1];
-                        end
-                    end
                 end
-
             end
 
-            assign snap_to_core   = snap_pipe[PIPELINE_DEPTH-1];
             assign is_taken_vld   = taken_vld_pipe[PIPELINE_DEPTH-1];
-            assign is_snap_vld    = snap_vld_pipe[PIPELINE_DEPTH-1];
+        end
+    endgenerate
+
+    generate
+        if (FEEDBACK_DEPTH == 0) begin : GEN_SNAPSHOT_DIRECT
+            assign snap_to_core = snap_from_core;
+            assign is_snap_vld  = core_pred_vld;
+        end else begin : GEN_SNAPSHOT_PIPE
+            logic [FEEDBACK_DEPTH-1:0] snap_vld_pipe;
+            tage_snap_t                snap_pipe [0:FEEDBACK_DEPTH-1];
+
+            if (FEEDBACK_DEPTH == 1) begin : GEN_SNAPSHOT_ONE
+                always_ff @(posedge i_clk or negedge i_rst_n) begin
+                    if (!i_rst_n) begin
+                        snap_vld_pipe <= '0;
+                        snap_pipe[0]  <= '0;
+                    end else begin
+                        snap_vld_pipe[0] <= flush_younger ? 1'b0 : core_pred_vld;
+                        snap_pipe[0]     <= snap_from_core;
+                    end
+                end
+            end else begin : GEN_SNAPSHOT_MULTI
+                always_ff @(posedge i_clk or negedge i_rst_n) begin
+                    if (!i_rst_n) begin
+                        snap_vld_pipe <= '0;
+                        for (int i = 0; i < FEEDBACK_DEPTH; i++)
+                            snap_pipe[i] <= '0;
+                    end else begin
+                        if (flush_younger)
+                            snap_vld_pipe <= {{(FEEDBACK_DEPTH-1){1'b0}}, 1'b0};
+                        else
+                            snap_vld_pipe <= {snap_vld_pipe[FEEDBACK_DEPTH-2:0], core_pred_vld};
+
+                        snap_pipe[0] <= snap_from_core;
+                        for (int i = 1; i < FEEDBACK_DEPTH; i++)
+                            snap_pipe[i] <= snap_pipe[i-1];
+                    end
+                end
+            end
+
+            assign snap_to_core = snap_pipe[FEEDBACK_DEPTH-1];
+            assign is_snap_vld  = snap_vld_pipe[FEEDBACK_DEPTH-1];
         end
     endgenerate
 
@@ -101,6 +123,8 @@ module tage_predictor #(
         .NUM_TABLES       (NUM_TABLES),
         .TAG_CTR_W        (TAG_CTR_W),
         .TAG_USE_W        (TAG_USE_W),
+        .PREDICT_LATENCY  (CORE_LATENCY),
+        .AGE_INTERVAL     (AGE_INTERVAL),
         .HIST_LENS_LUT    (HIST_LENS_LUT),
         .TABLE_ENTRIES_LUT(TABLE_ENTRIES_LUT),
         .TAG_WIDTH_LUT    (TAG_WIDTH_LUT)
@@ -118,8 +142,11 @@ module tage_predictor #(
         .i_input_snap_bus (snap_to_core),
         .o_output_snap_bus(snap_from_core),
 
+        .o_pred_vld       (core_pred_vld),
         .o_pred_taken     (o_pred_taken),
         .o_pred_wrong     (resolve_wrong)
     );
+
+    assign o_pred_vld = core_pred_vld;
 
 endmodule

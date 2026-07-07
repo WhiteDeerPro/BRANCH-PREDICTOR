@@ -7,7 +7,17 @@ module tb_tage_predictor_core;
 
     import tage_pkg::*;
     
-    localparam CLK_PERIOD = 10;
+    localparam CLK_PERIOD      = 10;
+`ifdef TAGE_CORE_LATENCY
+    localparam PREDICT_LATENCY = `TAGE_CORE_LATENCY;
+`else
+    localparam PREDICT_LATENCY = 1;
+`endif
+`ifdef TAGE_AGE_INTERVAL
+    localparam AGE_INTERVAL = `TAGE_AGE_INTERVAL;
+`else
+    localparam AGE_INTERVAL = 4096;
+`endif
     localparam ADDR_MIN   = 0;
     localparam ADDR_MAX   = 16;          // 0~252, step 4, 共64个地址
     localparam ADDR_STEP  = 4;
@@ -25,9 +35,15 @@ module tb_tage_predictor_core;
     // 使用 $bits 动态获取结构体的总位宽
     logic [$bits(tage_pkg::tage_snap_t)-1:0] input_snap_bus, output_snap_bus;
     logic        pred_taken;
+    logic        pred_vld;
     logic        pred_wrong;
     bit          verbose_trace;
     tage_snap_t  snap_reg;
+    logic        snap_reg_vld;
+    logic [PREDICT_LATENCY-1:0] actual_delay_pipe;
+    logic [PREDICT_LATENCY-1:0][31:0] pc_delay_pipe;
+    logic        actual_for_pred;
+    logic [31:0] pc_for_pred;
     int          branch_cnt;
     int          correct_cnt;
 
@@ -38,7 +54,10 @@ module tb_tage_predictor_core;
     assign snap_out = tage_snap_t'(output_snap_bus);
     
     // DUT 实例化（端口名匹配修改后的 core）
-    tage_predictor_core core (
+    tage_predictor_core #(
+        .PREDICT_LATENCY(PREDICT_LATENCY),
+        .AGE_INTERVAL   (AGE_INTERVAL)
+    ) core (
         .i_clk           (clk),
         .i_rst_n         (rst_n),
         .i_pc            (pc),
@@ -51,6 +70,7 @@ module tb_tage_predictor_core;
         
         .i_input_snap_bus(input_snap_bus),
         .o_output_snap_bus(output_snap_bus),
+        .o_pred_vld      (pred_vld),
         .o_pred_taken    (pred_taken),
         .o_pred_wrong    (pred_wrong)
     );
@@ -99,12 +119,14 @@ module tb_tage_predictor_core;
     // =========================================================================
     
     assign predict_vld = 1'b1;                    // 每个周期都有一条新预测请求
-    assign update_vld    = (branch_cnt != 0);      // 第一拍之后验证上一条预测
+    assign update_vld    = snap_reg_vld;
     assign is_taken_vld  = update_vld;
 
 
     assign actual_taken_update = snap_reg.actual_taken;
     assign input_snap_bus      = snap_reg;
+    assign actual_for_pred     = actual_delay_pipe[PREDICT_LATENCY-1];
+    assign pc_for_pred         = pc_delay_pipe[PREDICT_LATENCY-1];
 
     // =========================================================================
     // 统计准确率
@@ -117,14 +139,22 @@ module tb_tage_predictor_core;
             correct_cnt <= 0;
             last_pred_taken <= 0;
             snap_reg <= '0;
+            snap_reg_vld <= 1'b0;
+            actual_delay_pipe <= '0;
+            pc_delay_pipe <= '0;
         end else begin
+            actual_delay_pipe <= {actual_delay_pipe[PREDICT_LATENCY-1:0], actual_taken_req};
+            pc_delay_pipe     <= {pc_delay_pipe[PREDICT_LATENCY-1:0], pc};
             last_pred_taken <= pred_taken;
-            snap_reg <= snap_out;
-            snap_reg.actual_taken <= actual_taken_req;
-            // 采样当前预测
-            branch_cnt <= branch_cnt + 1;
-            if (pred_taken == actual_taken_req)     // 预测结果 vs 实际方向
-                correct_cnt <= correct_cnt + 1;
+            snap_reg_vld <= pred_vld;
+            if (pred_vld) begin
+                snap_reg <= snap_out;
+                snap_reg.actual_taken <= actual_for_pred;
+                // 采样当前有效预测
+                branch_cnt <= branch_cnt + 1;
+                if (pred_taken == actual_for_pred)
+                    correct_cnt <= correct_cnt + 1;
+            end
         end
     end
 
@@ -136,10 +166,10 @@ module tb_tage_predictor_core;
     end
 
     always_ff @(posedge clk) begin
-        if (verbose_trace) begin
+        if (verbose_trace && pred_vld) begin
             $display("[%t] PC=0x%0h pred=%b actual=%b %s",
-                     $time, pc, pred_taken, actual_taken_req,
-                     (pred_taken == actual_taken_req) ? "CORRECT" : "WRONG");
+                     $time, pc_for_pred, pred_taken, actual_for_pred,
+                     (pred_taken == actual_for_pred) ? "CORRECT" : "WRONG");
         end
     end
 

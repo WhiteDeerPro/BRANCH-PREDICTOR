@@ -9,6 +9,16 @@
 module tb_tage_predictor_overlap_update_predict;
 
     localparam int PIPELINE_DEPTH       = 11;
+`ifdef TAGE_CORE_LATENCY
+    localparam int CORE_LATENCY         = `TAGE_CORE_LATENCY;
+`else
+    localparam int CORE_LATENCY         = 1;
+`endif
+`ifdef TAGE_AGE_INTERVAL
+    localparam int AGE_INTERVAL         = `TAGE_AGE_INTERVAL;
+`else
+    localparam int AGE_INTERVAL         = 4096;
+`endif
     localparam int CLK_PERIOD           = 10;
     localparam int BRANCH_GAP_CYCLES    = PIPELINE_DEPTH;
     localparam int TOTAL_CYCLES_DEFAULT = 50000;
@@ -24,6 +34,8 @@ module tb_tage_predictor_overlap_update_predict;
     logic        is_taken_vld;
     logic        actual_taken;
     logic        actual_taken_req;
+    logic        actual_taken_pred;
+    logic        pred_vld;
     logic        pred_taken;
 
     int total_cycles;
@@ -35,6 +47,8 @@ module tb_tage_predictor_overlap_update_predict;
 
     logic [PIPELINE_DEPTH-1:0] outstanding_pipe;
     logic [PIPELINE_DEPTH-1:0] actual_pipe;
+    logic [CORE_LATENCY-1:0]     actual_pred_pipe;
+    logic [CORE_LATENCY-1:0][31:0] pc_pred_pipe;
 
     function automatic logic actual_for_addr(input int addr);
         case (addr)
@@ -71,6 +85,7 @@ module tb_tage_predictor_overlap_update_predict;
         $display("\n==================================================");
         $display("Wrapper overlap update/predict smoke test");
         $display("Pipeline depth   : %0d", PIPELINE_DEPTH);
+        $display("Core latency     : %0d", CORE_LATENCY);
         $display("Branch gap cycles: %0d", BRANCH_GAP_CYCLES);
         $display("Total branches   : %0d", branch_cnt);
         $display("Correct predicts : %0d", correct_cnt);
@@ -88,6 +103,7 @@ module tb_tage_predictor_overlap_update_predict;
 
     assign is_taken_vld     = (rst_n && gap_cnt == 0);
     assign actual_taken_req = actual_for_addr(addr_cnt);
+    assign actual_taken_pred = actual_pred_pipe[CORE_LATENCY-1];
     assign actual_taken     = actual_pipe[PIPELINE_DEPTH-1];
     assign pc               = 32'(addr_cnt);
 
@@ -99,6 +115,8 @@ module tb_tage_predictor_overlap_update_predict;
             correct_cnt      <= 0;
             outstanding_pipe <= '0;
             actual_pipe      <= '0;
+            actual_pred_pipe <= '0;
+            pc_pred_pipe     <= '0;
         end else begin
             gap_cnt <= (gap_cnt == BRANCH_GAP_CYCLES-1) ? 0 : gap_cnt + 1;
 
@@ -106,36 +124,43 @@ module tb_tage_predictor_overlap_update_predict;
                 if (|outstanding_pipe[PIPELINE_DEPTH-2:0])
                     $fatal(1, "More than one unresolved branch before same-cycle resolve at time %0t", $time);
 
-                branch_cnt <= branch_cnt + 1;
-                if (pred_taken == actual_taken_req)
-                    correct_cnt <= correct_cnt + 1;
-
-                if (verbose_trace || branch_cnt < 8) begin
-                    $display("[%t] branch=%0d PC=0x%0h pred=%b actual=%b resolving=%b %s",
-                             $time, branch_cnt + 1, pc, pred_taken, actual_taken_req,
-                             outstanding_pipe[PIPELINE_DEPTH-1],
-                             (pred_taken == actual_taken_req) ? "CORRECT" : "WRONG");
-                end
-
                 if (addr_cnt >= ADDR_MAX)
                     addr_cnt <= ADDR_MIN;
                 else
                     addr_cnt <= addr_cnt + ADDR_STEP;
             end
 
+            if (pred_vld) begin
+                branch_cnt <= branch_cnt + 1;
+                if (pred_taken == actual_taken_pred)
+                    correct_cnt <= correct_cnt + 1;
+
+                if (verbose_trace || branch_cnt < 8) begin
+                    $display("[%t] branch=%0d PC=0x%0h pred=%b actual=%b resolving=%b %s",
+                             $time, branch_cnt + 1, pc_pred_pipe[CORE_LATENCY-1], pred_taken, actual_taken_pred,
+                             outstanding_pipe[PIPELINE_DEPTH-1],
+                             (pred_taken == actual_taken_pred) ? "CORRECT" : "WRONG");
+                end
+            end
+
             outstanding_pipe <= {outstanding_pipe[PIPELINE_DEPTH-2:0], is_taken_vld};
             actual_pipe      <= {actual_pipe[PIPELINE_DEPTH-2:0], is_taken_vld ? actual_taken_req : 1'b0};
+            actual_pred_pipe <= {actual_pred_pipe[CORE_LATENCY-1:0], is_taken_vld ? actual_taken_req : 1'b0};
+            pc_pred_pipe     <= {pc_pred_pipe[CORE_LATENCY-1:0], pc};
         end
     end
 
     tage_predictor #(
-        .PIPELINE_DEPTH (PIPELINE_DEPTH)
+        .PIPELINE_DEPTH (PIPELINE_DEPTH),
+        .CORE_LATENCY   (CORE_LATENCY),
+        .AGE_INTERVAL   (AGE_INTERVAL)
     ) dut (
         .i_clk          (clk),
         .i_rst_n        (rst_n),
         .i_pc           (pc),
         .i_is_taken_vld (is_taken_vld),
         .i_actual_taken (actual_taken),
+        .o_pred_vld     (pred_vld),
         .o_pred_taken   (pred_taken)
     );
 

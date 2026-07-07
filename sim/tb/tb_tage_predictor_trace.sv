@@ -12,6 +12,17 @@ module tb_tage_predictor_trace;
     import tage_pkg::*;
 
     localparam int PIPELINE_DEPTH = 11;
+`ifdef TAGE_CORE_LATENCY
+    localparam int CORE_LATENCY   = `TAGE_CORE_LATENCY;
+`else
+    localparam int CORE_LATENCY   = 1;
+`endif
+`ifdef TAGE_AGE_INTERVAL
+    localparam int AGE_INTERVAL   = `TAGE_AGE_INTERVAL;
+`else
+    localparam int AGE_INTERVAL   = 4096;
+`endif
+    localparam int FEEDBACK_DEPTH = PIPELINE_DEPTH - CORE_LATENCY;
     localparam int CLK_PERIOD     = 10;
 
 `ifdef TAGE_CFG_TINY
@@ -41,17 +52,22 @@ module tb_tage_predictor_trace;
     logic [31:0] brpc2;
 
     logic        resolve_actual_taken;
+    logic        pred_actual_taken;
+    logic        wrap_pred_vld;
     logic        wrap_pred;
 
     logic [PIPELINE_DEPTH-1:0] resolve_actual_pipe;
+    logic [CORE_LATENCY-1:0]     pred_actual_pipe;
+    logic [CORE_LATENCY-1:0][31:0] pred_pc_pipe;
     logic [PIPELINE_DEPTH-1:0] ref_resolve_vld_pipe;
-    logic [PIPELINE_DEPTH-1:0] ref_resolve_snap_vld_pipe;
-    tage_snap_t                ref_snap_pipe [0:PIPELINE_DEPTH-1];
+    logic [FEEDBACK_DEPTH-1:0] ref_resolve_snap_vld_pipe;
+    tage_snap_t                ref_snap_pipe [0:FEEDBACK_DEPTH-1];
 
     logic [$bits(tage_pkg::tage_snap_t)-1:0] ref_snap_in_bus;
     logic [$bits(tage_pkg::tage_snap_t)-1:0] ref_snap_out_bus;
     logic ref_resolve_vld;
     logic ref_resolve_snap_vld;
+    logic ref_pred_vld;
     logic ref_pred;
     logic ref_resolve_wrong;
     logic ref_flush_younger;
@@ -62,6 +78,7 @@ module tb_tage_predictor_trace;
     int cycle_cnt;
     int vector_cnt;
     int branch_cnt;
+    int pred_cnt;
     int measured_cnt;
     int match_cnt;
     int mismatch_cnt;
@@ -150,9 +167,10 @@ module tb_tage_predictor_trace;
     end
 
     assign resolve_actual_taken    = resolve_actual_pipe[PIPELINE_DEPTH-1];
+    assign pred_actual_taken       = pred_actual_pipe[CORE_LATENCY-1];
     assign ref_resolve_vld = ref_resolve_vld_pipe[PIPELINE_DEPTH-1];
-    assign ref_resolve_snap_vld  = ref_resolve_snap_vld_pipe[PIPELINE_DEPTH-1];
-    assign ref_snap_in_bus      = ref_snap_pipe[PIPELINE_DEPTH-1];
+    assign ref_resolve_snap_vld  = ref_resolve_snap_vld_pipe[FEEDBACK_DEPTH-1];
+    assign ref_snap_in_bus      = ref_snap_pipe[FEEDBACK_DEPTH-1];
     assign ref_flush_younger = ref_resolve_wrong && ref_resolve_snap_vld;
 
     always_ff @(posedge clk or negedge rst_n) begin
@@ -163,13 +181,16 @@ module tb_tage_predictor_trace;
             brpc1              <= '0;
             brpc2              <= '0;
             resolve_actual_pipe        <= '0;
+            pred_actual_pipe           <= '0;
+            pred_pc_pipe               <= '0;
             ref_resolve_vld_pipe <= '0;
             ref_resolve_snap_vld_pipe  <= '0;
-            for (int i = 0; i < PIPELINE_DEPTH; i++)
+            for (int i = 0; i < FEEDBACK_DEPTH; i++)
                 ref_snap_pipe[i] <= '0;
             cycle_cnt       <= 0;
             vector_cnt      <= 0;
             branch_cnt      <= 0;
+            pred_cnt        <= 0;
             measured_cnt    <= 0;
             match_cnt       <= 0;
             mismatch_cnt    <= 0;
@@ -201,46 +222,58 @@ module tb_tage_predictor_trace;
 
             if (predict_req_vld) begin
                 branch_cnt <= branch_cnt + 1;
+            end
+
+            if (wrap_pred_vld || ref_pred_vld) begin
+                if (wrap_pred_vld != ref_pred_vld) begin
+                    mismatch_cnt <= mismatch_cnt + 1;
+                    $fatal(1, "Prediction valid mismatch at cycle %0d: wrap_vld=%b ref_vld=%b",
+                           cycle_cnt, wrap_pred_vld, ref_pred_vld);
+                end
 
                 if (wrap_pred == ref_pred)
                     match_cnt <= match_cnt + 1;
                 else
                     mismatch_cnt <= mismatch_cnt + 1;
 
-                if (branch_cnt >= warmup_branches) begin
+                if (pred_cnt >= warmup_branches) begin
                     measured_cnt <= measured_cnt + 1;
-                    if (wrap_pred == trace_actual_taken)
+                    if (wrap_pred == pred_actual_taken)
                         wrap_correct_cnt <= wrap_correct_cnt + 1;
-                    if (ref_pred == trace_actual_taken)
+                    if (ref_pred == pred_actual_taken)
                         ref_correct_cnt <= ref_correct_cnt + 1;
                 end
 
-                if (verbose_trace || branch_cnt < 8) begin
-                    $display("[%t] branch=%0d PC=0x%0h actual=%b wrap=%b ref=%b target=0x%0h %s",
-                             $time, branch_cnt + 1, pc, trace_actual_taken, wrap_pred, ref_pred,
-                             trace_actual_taken ? brpc2 : brpc1,
+                if (verbose_trace || pred_cnt < 8) begin
+                    $display("[%t] pred=%0d PC=0x%0h actual=%b wrap=%b ref=%b %s",
+                             $time, pred_cnt + 1, pred_pc_pipe[CORE_LATENCY-1],
+                             pred_actual_taken, wrap_pred, ref_pred,
                              (wrap_pred == ref_pred) ? "MATCH" : "MISMATCH");
                 end
+
+                pred_cnt <= pred_cnt + 1;
             end
 
             if (cycle_cnt < dbg_cycles) begin
-                $display("[DBG %0t] cyc=%0d pc=0x%0h predict_req=%b resolve_vld=%b resolve_snap=%b resolve_actual=%b wrap_pred=%b ref_pred=%b resolve_wrong=%b flush_younger=%b snap_pipe=%b",
-                         $time, cycle_cnt, pc, predict_req_vld, ref_resolve_vld,
-                         ref_resolve_snap_vld, resolve_actual_taken, wrap_pred, ref_pred,
+                $display("[DBG %0t] cyc=%0d pc=0x%0h predict_req=%b wrap_vld=%b ref_vld=%b resolve_vld=%b resolve_snap=%b resolve_actual=%b wrap_pred=%b ref_pred=%b resolve_wrong=%b flush_younger=%b snap_pipe=%b",
+                         $time, cycle_cnt, pc, predict_req_vld, wrap_pred_vld, ref_pred_vld,
+                         ref_resolve_vld, ref_resolve_snap_vld, resolve_actual_taken, wrap_pred, ref_pred,
                          ref_resolve_wrong, ref_flush_younger, ref_resolve_snap_vld_pipe);
             end
 
             if (ref_flush_younger)
-                ref_resolve_snap_vld_pipe <= {{(PIPELINE_DEPTH-1){1'b0}}, predict_req_vld};
+                ref_resolve_snap_vld_pipe <= '0;
             else
-                ref_resolve_snap_vld_pipe <= {ref_resolve_snap_vld_pipe[PIPELINE_DEPTH-2:0], predict_req_vld};
+                ref_resolve_snap_vld_pipe <= {ref_resolve_snap_vld_pipe[FEEDBACK_DEPTH-2:0], ref_pred_vld};
             ref_resolve_vld_pipe <= {ref_resolve_vld_pipe[PIPELINE_DEPTH-2:0], predict_req_vld};
 
             ref_snap_pipe[0] <= tage_snap_t'(ref_snap_out_bus);
-            for (int i = 1; i < PIPELINE_DEPTH; i++)
+            for (int i = 1; i < FEEDBACK_DEPTH; i++)
                 ref_snap_pipe[i] <= ref_snap_pipe[i-1];
 
             resolve_actual_pipe <= {resolve_actual_pipe[PIPELINE_DEPTH-2:0], predict_req_vld ? trace_actual_taken : 1'b0};
+            pred_actual_pipe    <= {pred_actual_pipe[CORE_LATENCY-1:0], predict_req_vld ? trace_actual_taken : 1'b0};
+            pred_pc_pipe        <= {pred_pc_pipe[CORE_LATENCY-1:0], pc};
 
             if (!eof_seen) begin
                 load_next_vector(load_pc, load_predict_req_vld, load_actual,
@@ -272,13 +305,16 @@ module tb_tage_predictor_trace;
             if (cycle_cnt > max_cycles)
                 $fatal(1, "Trace test timeout after %0d cycles", max_cycles);
 
-            if (eof_seen && drain_cnt >= PIPELINE_DEPTH + 2) begin
+            if (eof_seen && drain_cnt >= PIPELINE_DEPTH + CORE_LATENCY + 2) begin
                 $display("\n==================================================");
                 $display("Wrapper/Core trace compare test");
                 $display("Trace file       : %s", trace_file);
                 $display("Pipeline depth   : %0d", PIPELINE_DEPTH);
+                $display("Core latency     : %0d", CORE_LATENCY);
+                $display("Age interval     : %0d", AGE_INTERVAL);
                 $display("Vectors          : %0d", vector_cnt);
                 $display("Total branches   : %0d", branch_cnt);
+                $display("Predictions      : %0d", pred_cnt);
                 $display("Warmup branches  : %0d", warmup_branches);
                 $display("Measured branches: %0d", measured_cnt);
                 $display("Prediction match : %0d", match_cnt);
@@ -306,6 +342,8 @@ module tb_tage_predictor_trace;
 
     tage_predictor #(
         .PIPELINE_DEPTH    (PIPELINE_DEPTH),
+        .CORE_LATENCY      (CORE_LATENCY),
+        .AGE_INTERVAL      (AGE_INTERVAL),
         .BIMODAL_SIZE      (CFG_BIMODAL_SIZE),
         .HIST_LENS_LUT     (CFG_HIST_LENS_LUT),
         .TABLE_ENTRIES_LUT (CFG_TABLE_ENTRIES_LUT),
@@ -316,10 +354,13 @@ module tb_tage_predictor_trace;
         .i_pc           (pc),
         .i_is_taken_vld (predict_req_vld),
         .i_actual_taken (resolve_actual_taken),
+        .o_pred_vld     (wrap_pred_vld),
         .o_pred_taken   (wrap_pred)
     );
 
     tage_predictor_core #(
+        .PREDICT_LATENCY  (CORE_LATENCY),
+        .AGE_INTERVAL     (AGE_INTERVAL),
         .BIMODAL_SIZE      (CFG_BIMODAL_SIZE),
         .HIST_LENS_LUT     (CFG_HIST_LENS_LUT),
         .TABLE_ENTRIES_LUT (CFG_TABLE_ENTRIES_LUT),
@@ -334,6 +375,7 @@ module tb_tage_predictor_trace;
         .i_is_taken_vld    (ref_resolve_vld),
         .i_input_snap_bus  (ref_snap_in_bus),
         .o_output_snap_bus (ref_snap_out_bus),
+        .o_pred_vld        (ref_pred_vld),
         .o_pred_taken      (ref_pred),
         .o_pred_wrong      (ref_resolve_wrong)
     );

@@ -15,6 +15,13 @@ The current design separates committed branch history from speculative history:
 
 Non-branch instructions in trace tests do not advance predictor history. They only consume cycles and check PC flow.
 
+The TAGE core also has two implementation-oriented controls:
+
+- `PREDICT_LATENCY` / wrapper `CORE_LATENCY`: selectable `0`, `1`, or `2`
+  cycle prediction output latency. The default wrapper test mode is `1`.
+- `AGE_INTERVAL`: useful-bit aging interval. `0` disables aging; otherwise a
+  periodic touched-entry aging writeback decrements nonzero useful bits.
+
 ## Layout
 
 ```text
@@ -182,6 +189,21 @@ make trace TRACE_CFG=tiny
 make trace TRACE_CFG=wide
 ```
 
+Core prediction latency:
+
+```bash
+make trace CORE_LATENCY=1
+make trace CORE_LATENCY=2
+```
+
+Useful-bit aging:
+
+```bash
+make trace AGE_INTERVAL=4096
+make trace AGE_INTERVAL=1024
+make trace AGE_INTERVAL=0
+```
+
 Front-end debug print window:
 
 ```bash
@@ -194,6 +216,7 @@ make trace TRACE_DBG_CYCLES=0
 In `tb_tage_predictor_trace.sv`:
 
 - `predict_req_vld`: current trace row is a branch and starts a prediction.
+- `wrap_pred_vld` / `ref_pred_vld`: delayed prediction output valid.
 - `trace_actual_taken`: real branch result attached to the current trace row.
 - `resolve_actual_taken`: delayed real result used when the branch resolves.
 - `ref_resolve_vld`: delayed resolved-branch valid.
@@ -225,5 +248,10 @@ The makefile normally generates traces automatically before `make trace`.
 ## Notes
 
 - `TRACE_CFG` only changes table sizes/history/tag LUTs used by the trace testbench instance.
+- `CORE_LATENCY` changes when prediction and snapshot outputs become valid.
+  The wrapper shortens its feedback snapshot pipe by the same amount, so total
+  branch resolve alignment remains `PIPELINE_DEPTH`.
+- `AGE_INTERVAL` ages only entries touched by the predictor read path. This
+  keeps the design one-read/one-write per table and avoids adding a scan port.
 - `NUM_TABLES` is kept consistent with `tage_pkg.sv` because snapshot type widths depend on package parameters.
 - Generated traces and simulation outputs are ignored by git.

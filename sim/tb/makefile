@@ -30,6 +30,8 @@ TRACE_DEEP_PERIOD ?= 2048
 TRACE_DEEP_START ?= 0
 TRACE_SEED       ?= 1
 TRACE_CFG        ?= default
+CORE_LATENCY     ?= 1
+AGE_INTERVAL     ?= 4096
 TRACE_DBG_CYCLES ?= 40
 TRACE_OUT        ?= sim/tb/traces/ws$(TRACE_WORKSET)_$(TRACE_PATTERN).trace
 TRACE_FILE       ?= ../../$(TRACE_OUT)
@@ -55,6 +57,7 @@ endif
 
 SIM_FLAGS := +fsdb+autoflush
 PLUSARGS  ?=
+LATENCY_DEFINE := +define+TAGE_CORE_LATENCY=$(CORE_LATENCY) +define+TAGE_AGE_INTERVAL=$(AGE_INTERVAL)
 
 .PHONY: all compile run verdi verdi_sch clean rerun help \
         core core_rerun core_verdi \
@@ -68,7 +71,7 @@ compile:
 	@echo "=================================================="
 	@echo " [VCS] compiling $(FLIST_PATH)"
 	@echo "=================================================="
-	cd $(PROJ_ROOT) && mkdir -p $(RUN_DIR) && vcs $(VCS_FLAGS) -Mdir=$(VCS_MDIR) -o $(SIMV) -f $(FLIST_PATH) -l $(RUN_DIR)/compile.log
+	cd $(PROJ_ROOT) && mkdir -p $(RUN_DIR) && vcs $(VCS_FLAGS) $(LATENCY_DEFINE) -Mdir=$(VCS_MDIR) -o $(SIMV) -f $(FLIST_PATH) -l $(RUN_DIR)/compile.log
 	@echo " [VCS] done: $(RUN_DIR)/compile.log"
 
 run:
@@ -190,7 +193,7 @@ trace_sweep:
 			TRACE_BODY_LEN_MIN=$(TRACE_BODY_LEN_MIN) TRACE_BODY_LEN_MAX=$(TRACE_BODY_LEN_MAX) \
 			TRACE_DEEP_LEN=$(TRACE_DEEP_LEN) TRACE_DEEP_PERIOD=$(TRACE_DEEP_PERIOD) \
 			TRACE_DEEP_START=$(TRACE_DEEP_START) \
-			TRACE_CFG=$(TRACE_CFG) TRACE_DBG_CYCLES=$(TRACE_DBG_CYCLES) \
+			TRACE_CFG=$(TRACE_CFG) CORE_LATENCY=$(CORE_LATENCY) AGE_INTERVAL=$(AGE_INTERVAL) TRACE_DBG_CYCLES=$(TRACE_DBG_CYCLES) \
 			TRACE_MAX_CYCLES=$(TRACE_MAX_CYCLES) || exit 1; \
 	done
 
@@ -211,4 +214,4 @@ help:
 	@echo "  TRACE_WORKSET=128 TRACE_PATTERN=mixed TRACE_BRANCHES=100000"
 	@echo "  TRACE_WARMUP=10000 TRACE_BODY_LEN=-1 TRACE_BODY_LEN_MIN=0 TRACE_BODY_LEN_MAX=15 TRACE_SEED=1"
 	@echo "  TRACE_DEEP_LEN=0 TRACE_DEEP_PERIOD=2048 TRACE_DEEP_START=0"
-	@echo "  TRACE_CFG=default|tiny|wide TRACE_DBG_CYCLES=40"
+	@echo "  TRACE_CFG=default|tiny|wide CORE_LATENCY=1|2 AGE_INTERVAL=4096 TRACE_DBG_CYCLES=40"
