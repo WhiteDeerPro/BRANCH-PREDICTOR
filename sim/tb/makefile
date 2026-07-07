@@ -37,6 +37,13 @@ TRACE_OUT        ?= sim/tb/traces/ws$(TRACE_WORKSET)_$(TRACE_PATTERN).trace
 TRACE_FILE       ?= ../../$(TRACE_OUT)
 TRACE_MAX_CYCLES ?= 1000000
 TRACE_SWEEP_WORKSETS ?= 32 128 512 2048
+MERMAID_PATTERN ?= mixed
+MERMAID_WORKSET ?= 8
+MERMAID_STEPS   ?= 12
+MERMAID_SEED    ?= 1
+MERMAID_DEEP_LEN ?= 0
+MERMAID_DEEP_AT  ?= 4
+MERMAID_DEEP_START ?= 0
 
 VCS_FLAGS := -sverilog \
              -debug_access+all \
@@ -63,7 +70,7 @@ LATENCY_DEFINE := +define+TAGE_CORE_LATENCY=$(CORE_LATENCY) +define+TAGE_AGE_INT
         core core_rerun core_verdi \
         single single_rerun single_verdi \
         overlap overlap_rerun overlap_verdi \
-        gen_trace trace trace_rerun trace_verdi trace_sweep
+        gen_trace trace trace_rerun trace_verdi trace_sweep mermaid
 
 all: core
 
@@ -197,6 +204,16 @@ trace_sweep:
 			TRACE_MAX_CYCLES=$(TRACE_MAX_CYCLES) || exit 1; \
 	done
 
+mermaid:
+	cd $(PROJ_ROOT) && python3 sim/tb/gen_mermaid.py \
+		--pattern $(MERMAID_PATTERN) \
+		--workset $(MERMAID_WORKSET) \
+		--steps $(MERMAID_STEPS) \
+		--seed $(MERMAID_SEED) \
+		--deep-len $(MERMAID_DEEP_LEN) \
+		--deep-at $(MERMAID_DEEP_AT) \
+		--deep-start $(MERMAID_DEEP_START)
+
 help:
 	@echo "Targets:"
 	@echo "  make core       - compile and run core test"
@@ -204,6 +221,7 @@ help:
 	@echo "  make overlap    - compile and run wrapper overlap update/predict test"
 	@echo "  make trace      - generate a CFG-like trace and compare wrapper against core"
 	@echo "  make trace_sweep - run trace over TRACE_SWEEP_WORKSETS='32 128 512 2048'"
+	@echo "  make mermaid    - print a Mermaid graph for MERMAID_PATTERN=mixed"
 	@echo "  make trace_verdi - open trace waveform; Verdi logs stay under sim/01"
 	@echo "  make compile    - compile FLIST=<file>, default core.f"
 	@echo "  make run        - run current sim/01/simv"
@@ -215,3 +233,4 @@ help:
 	@echo "  TRACE_WARMUP=10000 TRACE_BODY_LEN=-1 TRACE_BODY_LEN_MIN=0 TRACE_BODY_LEN_MAX=15 TRACE_SEED=1"
 	@echo "  TRACE_DEEP_LEN=0 TRACE_DEEP_PERIOD=2048 TRACE_DEEP_START=0"
 	@echo "  TRACE_CFG=default|tiny|wide CORE_LATENCY=1|2 AGE_INTERVAL=4096 TRACE_DBG_CYCLES=40"
+	@echo "  MERMAID_PATTERN=mixed MERMAID_WORKSET=8 MERMAID_STEPS=12 MERMAID_DEEP_LEN=0"

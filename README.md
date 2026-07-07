@@ -38,7 +38,11 @@ sim/tb/
   wrapper_overlap.f
   wrapper_trace.f
   gen_trace.py
+  gen_mermaid.py
   tb_tage_predictor_*.sv
+
+docs/
+  branch_pattern_mermaid.md
 ```
 
 Simulation outputs are generated under `sim/01`.
@@ -210,6 +214,17 @@ Front-end debug print window:
 make trace TRACE_DBG_CYCLES=80
 make trace TRACE_DBG_CYCLES=0
 ```
+
+Mermaid branch-pattern diagrams:
+
+```bash
+make mermaid MERMAID_PATTERN=loop MERMAID_WORKSET=6 MERMAID_STEPS=12
+make mermaid MERMAID_PATTERN=correlated MERMAID_WORKSET=8 MERMAID_STEPS=12
+make mermaid MERMAID_PATTERN=mixed MERMAID_WORKSET=10 MERMAID_STEPS=18 MERMAID_DEEP_LEN=6
+```
+
+See `docs/branch_pattern_mermaid.md` for static program-space arrows and red
+actual-path examples.
 
 ## Important Trace Signals
 

@@ -9,7 +9,7 @@ TB_DIR := sim/tb
         single single_rerun single_verdi \
         overlap overlap_rerun overlap_verdi \
         trace trace_rerun trace_verdi trace_sweep gen_trace \
-        tree
+        mermaid tree
 
 all:
 	$(MAKE) -C $(TB_DIR) all
@@ -73,6 +73,9 @@ trace_verdi:
 
 trace_sweep:
 	$(MAKE) -C $(TB_DIR) trace_sweep
+
+mermaid:
+	$(MAKE) -C $(TB_DIR) mermaid
 
 help:
 	$(MAKE) -C $(TB_DIR) help
