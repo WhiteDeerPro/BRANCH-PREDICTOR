@@ -161,8 +161,8 @@ def main() -> None:
 
     print("```mermaid")
     print("flowchart LR")
-    print('  classDef node fill:#fff,stroke:#111,color:#111;')
-    print('  classDef note fill:#fff7f7,stroke:#d33,color:#d33;')
+    print('  classDef node fill:#fff,stroke:#111;')
+    print('  classDef note fill:#fff7f7,stroke:#d33;')
     print(f'  note["pattern={args.pattern}, workset={args.workset}, steps={args.steps}"]:::note')
     for idx in range(args.workset):
         print(f'  B{idx}(("B{idx}")):::node')
@@ -179,9 +179,9 @@ def main() -> None:
 
     static_edges = args.workset * 2
     for edge_idx in range(static_edges):
-        print(f"  linkStyle {edge_idx} stroke:#111,stroke-width:1px,color:#111;")
+        print(f"  linkStyle {edge_idx} stroke:#111,stroke-width:1px;")
     for edge_idx in range(static_edges, static_edges + len(path)):
-        print(f"  linkStyle {edge_idx} stroke:#d33,stroke-width:3px,color:#d33;")
+        print(f"  linkStyle {edge_idx} stroke:#d33,stroke-width:3px;")
     print("```")
 
 

@@ -25,7 +25,7 @@ several taken iterations, then exits by one not-taken edge.
 
 ```mermaid
 flowchart LR
-  classDef node fill:#fff,stroke:#111,color:#111;
+  classDef node fill:#fff,stroke:#111;
   B0(("B0")):::node
   B1(("B1")):::node
   B2(("B2")):::node
@@ -43,8 +43,8 @@ flowchart LR
   B0 ==>|a2:NT| B1
   B1 ==>|a3:TK| B1
   B1 ==>|a4:NT| B2
-  linkStyle 0,1,2,3,4,5,6,7 stroke:#111,stroke-width:1px,color:#111;
-  linkStyle 8,9,10,11,12 stroke:#d33,stroke-width:3px,color:#d33;
+  linkStyle 0,1,2,3,4,5,6,7 stroke:#111,stroke-width:1px;
+  linkStyle 8,9,10,11,12 stroke:#d33,stroke-width:3px;
 ```
 
 ## Nested
@@ -54,7 +54,7 @@ when taken. This creates small backward regions nested inside the larger ring.
 
 ```mermaid
 flowchart LR
-  classDef node fill:#fff,stroke:#111,color:#111;
+  classDef node fill:#fff,stroke:#111;
   B0(("B0")):::node
   B1(("B1")):::node
   B2(("B2")):::node
@@ -78,8 +78,8 @@ flowchart LR
   B1 ==>|a2:TK| B0
   B0 ==>|a3:NT| B1
   B1 ==>|a4:NT| B2
-  linkStyle 0,1,2,3,4,5,6,7,8,9,10,11 stroke:#111,stroke-width:1px,color:#111;
-  linkStyle 12,13,14,15,16 stroke:#d33,stroke-width:3px,color:#d33;
+  linkStyle 0,1,2,3,4,5,6,7,8,9,10,11 stroke:#111,stroke-width:1px;
+  linkStyle 12,13,14,15,16 stroke:#d33,stroke-width:3px;
 ```
 
 ## Correlated
@@ -90,7 +90,7 @@ previous branch result and the current index, so it is history-correlated.
 
 ```mermaid
 flowchart LR
-  classDef node fill:#fff,stroke:#111,color:#111;
+  classDef node fill:#fff,stroke:#111;
   B0(("B0")):::node
   B1(("B1")):::node
   B2(("B2")):::node
@@ -120,8 +120,8 @@ flowchart LR
   B2 ==>|a2:TK| B5
   B5 ==>|a3:TK| B0
   B0 ==>|a4:TK| B3
-  linkStyle 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 stroke:#111,stroke-width:1px,color:#111;
-  linkStyle 16,17,18,19,20 stroke:#d33,stroke-width:3px,color:#d33;
+  linkStyle 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 stroke:#111,stroke-width:1px;
+  linkStyle 16,17,18,19,20 stroke:#d33,stroke-width:3px;
 ```
 
 ## Random
@@ -158,7 +158,7 @@ normal successor.
 
 ```mermaid
 flowchart LR
-  classDef node fill:#fff,stroke:#111,color:#111;
+  classDef node fill:#fff,stroke:#111;
   N0(("Normal B0")):::node
   N1(("Normal B1")):::node
   D0(("Deep B0")):::node
@@ -176,8 +176,8 @@ flowchart LR
   D1 ==>|a2:TK| D2
   D2 ==>|a3:TK| D3
   D3 ==>|a4:NT| N1
-  linkStyle 0,1,2,3,4,5 stroke:#111,stroke-width:1px,color:#111;
-  linkStyle 6,7,8,9,10 stroke:#d33,stroke-width:3px,color:#d33;
+  linkStyle 0,1,2,3,4,5 stroke:#111,stroke-width:1px;
+  linkStyle 6,7,8,9,10 stroke:#d33,stroke-width:3px;
 ```
 
 ## Body Length
