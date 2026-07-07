@@ -1,188 +1,98 @@
 # Branch Pattern Mermaid Notes
 
-These diagrams describe the same control-flow model used by
-`sim/tb/gen_trace.py`.
+`sim/tb/gen_mermaid.py` generates Mermaid diagrams from the same control-flow
+rules used by `sim/tb/gen_trace.py`.
 
-- Black arrows are the static program branch space.
-- `NT/0` means `BRRES=0`, so the dynamic next PC is `BRPC1`.
-- `TK/1` means `BRRES=1`, so the dynamic next PC is `BRPC2`.
-- Red thick arrows are one actual dynamic path through that static space.
+The generated text is deliberately conservative Mermaid syntax:
 
-Generate a diagram from the current formulas:
+- It outputs raw Mermaid by default, not a fenced Markdown block.
+- Static program-space arrows use normal black Mermaid edges.
+- Actual dynamic path arrows use thick edges and `linkStyle ... stroke:red`.
+- Labels avoid punctuation-heavy forms such as `NT/0` and use `NT0`, `TK1`,
+  `A0_TK`, and `A1_NT` instead.
 
-```bash
-python3 sim/tb/gen_mermaid.py --pattern loop --workset 6 --steps 12
-python3 sim/tb/gen_mermaid.py --pattern nested --workset 6 --steps 12
-python3 sim/tb/gen_mermaid.py --pattern correlated --workset 8 --steps 12
-python3 sim/tb/gen_mermaid.py --pattern mixed --workset 10 --steps 16 --deep-len 6
-```
-
-## Loop
-
-Program structure: every block has a fall-through edge to the next block and a
-taken edge back to itself. Actual execution usually stays in the same block for
-several taken iterations, then exits by one not-taken edge.
-
-```mermaid
-flowchart LR
-  classDef node fill:#fff,stroke:#111;
-  B0(("B0")):::node
-  B1(("B1")):::node
-  B2(("B2")):::node
-  B3(("B3")):::node
-  B0 -->|NT/0| B1
-  B0 -->|TK/1| B0
-  B1 -->|NT/0| B2
-  B1 -->|TK/1| B1
-  B2 -->|NT/0| B3
-  B2 -->|TK/1| B2
-  B3 -->|NT/0| B0
-  B3 -->|TK/1| B3
-  B0 ==>|a0:TK| B0
-  B0 ==>|a1:TK| B0
-  B0 ==>|a2:NT| B1
-  B1 ==>|a3:TK| B1
-  B1 ==>|a4:NT| B2
-  linkStyle 0,1,2,3,4,5,6,7 stroke:#111,stroke-width:1px;
-  linkStyle 8,9,10,11,12 stroke:#d33,stroke-width:3px;
-```
-
-## Nested
-
-Program structure: even blocks act like local loops; odd blocks jump backward
-when taken. This creates small backward regions nested inside the larger ring.
-
-```mermaid
-flowchart LR
-  classDef node fill:#fff,stroke:#111;
-  B0(("B0")):::node
-  B1(("B1")):::node
-  B2(("B2")):::node
-  B3(("B3")):::node
-  B4(("B4")):::node
-  B5(("B5")):::node
-  B0 -->|NT/0| B1
-  B0 -->|TK/1| B0
-  B1 -->|NT/0| B2
-  B1 -->|TK/1| B0
-  B2 -->|NT/0| B3
-  B2 -->|TK/1| B2
-  B3 -->|NT/0| B4
-  B3 -->|TK/1| B2
-  B4 -->|NT/0| B5
-  B4 -->|TK/1| B4
-  B5 -->|NT/0| B0
-  B5 -->|TK/1| B4
-  B0 ==>|a0:TK| B0
-  B0 ==>|a1:NT| B1
-  B1 ==>|a2:TK| B0
-  B0 ==>|a3:NT| B1
-  B1 ==>|a4:NT| B2
-  linkStyle 0,1,2,3,4,5,6,7,8,9,10,11 stroke:#111,stroke-width:1px;
-  linkStyle 12,13,14,15,16 stroke:#d33,stroke-width:3px;
-```
-
-## Correlated
-
-Program structure: not-taken still walks the ring, while taken jumps by the
-hash-like mapping `(idx * 17 + 3) % workset`. Actual direction depends on the
-previous branch result and the current index, so it is history-correlated.
-
-```mermaid
-flowchart LR
-  classDef node fill:#fff,stroke:#111;
-  B0(("B0")):::node
-  B1(("B1")):::node
-  B2(("B2")):::node
-  B3(("B3")):::node
-  B4(("B4")):::node
-  B5(("B5")):::node
-  B6(("B6")):::node
-  B7(("B7")):::node
-  B0 -->|NT/0| B1
-  B0 -->|TK/1| B3
-  B1 -->|NT/0| B2
-  B1 -->|TK/1| B4
-  B2 -->|NT/0| B3
-  B2 -->|TK/1| B5
-  B3 -->|NT/0| B4
-  B3 -->|TK/1| B6
-  B4 -->|NT/0| B5
-  B4 -->|TK/1| B7
-  B5 -->|NT/0| B6
-  B5 -->|TK/1| B0
-  B6 -->|NT/0| B7
-  B6 -->|TK/1| B1
-  B7 -->|NT/0| B0
-  B7 -->|TK/1| B2
-  B0 ==>|a0:NT| B1
-  B1 ==>|a1:NT| B2
-  B2 ==>|a2:TK| B5
-  B5 ==>|a3:TK| B0
-  B0 ==>|a4:TK| B3
-  linkStyle 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 stroke:#111,stroke-width:1px;
-  linkStyle 16,17,18,19,20 stroke:#d33,stroke-width:3px;
-```
-
-## Random
-
-Program structure is fixed, but the actual direction is random. This stresses
-aliasing and confidence behavior more than learnable loop history.
+## Generate
 
 ```bash
-python3 sim/tb/gen_mermaid.py --pattern random --workset 8 --steps 12 --seed 3
+make mermaid MERMAID_PATTERN=loop MERMAID_WORKSET=6 MERMAID_STEPS=12
+make mermaid MERMAID_PATTERN=nested MERMAID_WORKSET=6 MERMAID_STEPS=12
+make mermaid MERMAID_PATTERN=correlated MERMAID_WORKSET=8 MERMAID_STEPS=12
+make mermaid MERMAID_PATTERN=random MERMAID_WORKSET=8 MERMAID_STEPS=12 MERMAID_SEED=3
+make mermaid MERMAID_PATTERN=mixed MERMAID_WORKSET=10 MERMAID_STEPS=18 MERMAID_DEEP_LEN=6
 ```
 
-## Mixed
+Default output path:
 
-Program structure combines several families by `idx % 10`:
-
-- `0..5`: loop-like self taken edge.
-- `6..7`: correlated taken edge.
-- `8`: medium forward taken jump.
-- `9`: random-style taken target.
-
-This is the default trace shape because it mixes easy, correlated, biased, and
-noisy branches in one work set.
-
-```bash
-python3 sim/tb/gen_mermaid.py --pattern mixed --workset 10 --steps 18 --seed 1
+```text
+sim/01/branch_pattern_<pattern>.txt
 ```
 
-## Deep Burst
+For GitHub Markdown, wrap the generated text manually:
 
-`TRACE_DEEP_LEN` inserts a dense chain of branch-only blocks. The program first
-takes an entrance edge into the burst. Inside the burst, actual execution keeps
-taking to the next burst block, and the last branch exits by not-taken to the
-normal successor.
+````text
+```mermaid
+graph LR
+  B0((B0))
+  B0 -->|NT0| B1
+```
+````
+
+For Mermaid Live Editor or `mmdc`, use the raw generated `.txt` contents
+directly.
+
+## Minimal Example
 
 ```mermaid
-flowchart LR
-  classDef node fill:#fff,stroke:#111;
-  N0(("Normal B0")):::node
-  N1(("Normal B1")):::node
-  D0(("Deep B0")):::node
-  D1(("Deep B1")):::node
-  D2(("Deep B2")):::node
-  D3(("Deep B3")):::node
-  N0 -->|NT/0 normal| N1
-  N0 -->|TK/1 enter| D0
-  D0 -->|TK/1| D1
-  D1 -->|TK/1| D2
-  D2 -->|TK/1| D3
-  D3 -->|NT/0 exit| N1
-  N0 ==>|a0:TK| D0
-  D0 ==>|a1:TK| D1
-  D1 ==>|a2:TK| D2
-  D2 ==>|a3:TK| D3
-  D3 ==>|a4:NT| N1
-  linkStyle 0,1,2,3,4,5 stroke:#111,stroke-width:1px;
-  linkStyle 6,7,8,9,10 stroke:#d33,stroke-width:3px;
+graph LR
+  INFO[pattern loop  workset 4  steps 5]
+  B0((B0))
+  B1((B1))
+  B2((B2))
+  B3((B3))
+  B0 -->|NT0| B1
+  B0 -->|TK1| B0
+  B1 -->|NT0| B2
+  B1 -->|TK1| B1
+  B2 -->|NT0| B3
+  B2 -->|TK1| B2
+  B3 -->|NT0| B0
+  B3 -->|TK1| B3
+  B0 ==>|A0_TK| B0
+  B0 ==>|A1_TK| B0
+  B0 ==>|A2_NT| B1
+  B1 ==>|A3_TK| B1
+  B1 ==>|A4_NT| B2
+  linkStyle 8 stroke:red,stroke-width:3px;
+  linkStyle 9 stroke:red,stroke-width:3px;
+  linkStyle 10 stroke:red,stroke-width:3px;
+  linkStyle 11 stroke:red,stroke-width:3px;
+  linkStyle 12 stroke:red,stroke-width:3px;
 ```
+
+## Pattern Meaning
+
+`loop`: taken edge returns to the same static branch block; not-taken exits to
+the next block.
+
+`nested`: even blocks behave like local loops; odd blocks jump backward on
+taken, creating small backward regions.
+
+`correlated`: not-taken walks the ring; taken jumps by
+`(idx * 17 + 3) % workset`; direction depends on previous branch result and
+current index.
+
+`random`: static targets are deterministic, but actual branch direction is
+random.
+
+`mixed`: combines loop-like, correlated, biased, and noisy branches by
+`idx % 10`.
+
+`deep burst`: `MERMAID_DEEP_LEN` inserts a branch-only actual path. It models a
+dense run of consecutive branches where speculative history can become deep.
 
 ## Body Length
 
-`body_len` changes branch density, not the static branch target formula.
+`body_len` changes branch density, not static branch target formulas.
 
 With `body_len=0`, branch blocks are adjacent in time:
 

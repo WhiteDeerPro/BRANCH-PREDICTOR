@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Generate Mermaid control-flow diagrams for trace-generator patterns.
 
-Black arrows describe the static program branch space:
-    NT = BRRES 0 target, TK = BRRES 1 target.
+The default output intentionally uses a small Mermaid syntax subset:
+    graph LR
+    B0((B0))
+    B0 -->|NT0| B1
+    B0 ==>|A0_TK| B0
+    linkStyle 12 stroke:red,stroke-width:3px;
 
-Red arrows describe one dynamic path produced by the same branch-result rules
-used by gen_trace.py.
+This keeps the generated text compatible with older Mermaid renderers.
 """
 
 from __future__ import annotations
@@ -150,6 +153,8 @@ def main() -> None:
     parser.add_argument("--deep-len", type=int, default=0)
     parser.add_argument("--deep-at", type=int, default=4)
     parser.add_argument("--deep-start", type=int, default=0)
+    parser.add_argument("--fenced", action="store_true",
+                        help="Wrap output in a ```mermaid fenced code block.")
     args = parser.parse_args()
 
     if args.workset <= 0:
@@ -159,30 +164,30 @@ def main() -> None:
     if args.deep_len < 0:
         raise SystemExit("--deep-len must be non-negative")
 
-    print("```mermaid")
-    print("flowchart LR")
-    print('  classDef node fill:#fff,stroke:#111;')
-    print('  classDef note fill:#fff7f7,stroke:#d33;')
-    print(f'  note["pattern={args.pattern}, workset={args.workset}, steps={args.steps}"]:::note')
+    if args.fenced:
+        print("```mermaid")
+
+    print("graph LR")
+    print(f"  INFO[pattern {args.pattern}  workset {args.workset}  steps {args.steps}]")
     for idx in range(args.workset):
-        print(f'  B{idx}(("B{idx}")):::node')
+        print(f"  B{idx}((B{idx}))")
 
     for idx in range(args.workset):
         nt_idx, tk_idx = branch_targets(idx, args.workset, args.pattern)
-        print(f"  B{idx} -->|NT/0| B{nt_idx}")
-        print(f"  B{idx} -->|TK/1| B{tk_idx}")
+        print(f"  B{idx} -->|NT0| B{nt_idx}")
+        print(f"  B{idx} -->|TK1| B{tk_idx}")
 
     path = dynamic_path(args)
     for step, (src, result, dst) in enumerate(path):
-        label = f"a{step}:{'TK' if result else 'NT'}"
+        label = f"A{step}_{'TK' if result else 'NT'}"
         print(f"  B{src} ==>|{label}| B{dst}")
 
     static_edges = args.workset * 2
-    for edge_idx in range(static_edges):
-        print(f"  linkStyle {edge_idx} stroke:#111,stroke-width:1px;")
     for edge_idx in range(static_edges, static_edges + len(path)):
-        print(f"  linkStyle {edge_idx} stroke:#d33,stroke-width:3px;")
-    print("```")
+        print(f"  linkStyle {edge_idx} stroke:red,stroke-width:3px;")
+
+    if args.fenced:
+        print("```")
 
 
 if __name__ == "__main__":
