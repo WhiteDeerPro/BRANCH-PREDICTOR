@@ -39,12 +39,15 @@ TRACE_MAX_CYCLES ?= 1000000
 TRACE_SWEEP_WORKSETS ?= 32 128 512 2048
 MERMAID_PATTERN ?= mixed
 MERMAID_WORKSET ?= 8
+MERMAID_FULLSET ?= 0
 MERMAID_STEPS   ?= 12
 MERMAID_SEED    ?= 1
 MERMAID_DEEP_LEN ?= 0
 MERMAID_DEEP_AT  ?= 4
 MERMAID_DEEP_START ?= 0
+MERMAID_PREDICTOR ?= none
 MERMAID_OUT ?= $(RUN_DIR)/branch_pattern_$(MERMAID_PATTERN).txt
+MERMAID_DIR ?= docs/mermaid_txt
 
 VCS_FLAGS := -sverilog \
              -debug_access+all \
@@ -71,7 +74,7 @@ LATENCY_DEFINE := +define+TAGE_CORE_LATENCY=$(CORE_LATENCY) +define+TAGE_AGE_INT
         core core_rerun core_verdi \
         single single_rerun single_verdi \
         overlap overlap_rerun overlap_verdi \
-        gen_trace trace trace_rerun trace_verdi trace_sweep mermaid
+        gen_trace trace trace_rerun trace_verdi trace_sweep mermaid mermaid_suite
 
 all: core
 
@@ -212,13 +215,28 @@ mermaid:
 	cd $(PROJ_ROOT) && mkdir -p $(RUN_DIR) && python3 sim/tb/gen_mermaid.py \
 		--pattern $(MERMAID_PATTERN) \
 		--workset $(MERMAID_WORKSET) \
+		--fullset $(MERMAID_FULLSET) \
 		--steps $(MERMAID_STEPS) \
 		--seed $(MERMAID_SEED) \
 		--deep-len $(MERMAID_DEEP_LEN) \
 		--deep-at $(MERMAID_DEEP_AT) \
 		--deep-start $(MERMAID_DEEP_START) \
+		--predictor $(MERMAID_PREDICTOR) \
 		> $(MERMAID_OUT)
 	@echo " [MERMAID] done: $(MERMAID_OUT)"
+
+mermaid_suite:
+	@echo "=================================================="
+	@echo " [MERMAID] generating suite in $(MERMAID_DIR)"
+	@echo "=================================================="
+	cd $(PROJ_ROOT) && mkdir -p $(MERMAID_DIR) && python3 sim/tb/gen_mermaid.py --pattern loop --workset 6 --fullset 10 --steps 12 --seed 1 > $(MERMAID_DIR)/01_loop_workset.txt
+	cd $(PROJ_ROOT) && mkdir -p $(MERMAID_DIR) && python3 sim/tb/gen_mermaid.py --pattern nested --workset 6 --fullset 10 --steps 12 --seed 1 > $(MERMAID_DIR)/02_nested_workset.txt
+	cd $(PROJ_ROOT) && mkdir -p $(MERMAID_DIR) && python3 sim/tb/gen_mermaid.py --pattern correlated --workset 8 --fullset 12 --steps 14 --seed 1 > $(MERMAID_DIR)/03_correlated_workset.txt
+	cd $(PROJ_ROOT) && mkdir -p $(MERMAID_DIR) && python3 sim/tb/gen_mermaid.py --pattern random --workset 8 --fullset 12 --steps 14 --seed 3 > $(MERMAID_DIR)/04_random_workset.txt
+	cd $(PROJ_ROOT) && mkdir -p $(MERMAID_DIR) && python3 sim/tb/gen_mermaid.py --pattern mixed --workset 10 --fullset 16 --steps 18 --seed 1 > $(MERMAID_DIR)/05_mixed_workset.txt
+	cd $(PROJ_ROOT) && mkdir -p $(MERMAID_DIR) && python3 sim/tb/gen_mermaid.py --pattern mixed --workset 10 --fullset 16 --steps 18 --seed 1 --deep-len 6 --deep-at 4 > $(MERMAID_DIR)/06_mixed_deep_burst.txt
+	cd $(PROJ_ROOT) && mkdir -p $(MERMAID_DIR) && python3 sim/tb/gen_mermaid.py --pattern mixed --workset 8 --fullset 16 --steps 12 --seed 1 --predictor always_not_taken > $(MERMAID_DIR)/07_predictor_error_sets.txt
+	@echo " [MERMAID] done: $(MERMAID_DIR)"
 
 help:
 	@echo "Targets:"
@@ -228,6 +246,7 @@ help:
 	@echo "  make trace      - generate a CFG-like trace and compare wrapper against core"
 	@echo "  make trace_sweep - run trace over TRACE_SWEEP_WORKSETS='32 128 512 2048'"
 	@echo "  make mermaid    - write a Mermaid graph to MERMAID_OUT"
+	@echo "  make mermaid_suite - write standard Mermaid txt files to MERMAID_DIR"
 	@echo "  make trace_verdi - open trace waveform; Verdi logs stay under sim/01"
 	@echo "  make compile    - compile FLIST=<file>, default core.f"
 	@echo "  make run        - run current sim/01/simv"
@@ -239,4 +258,4 @@ help:
 	@echo "  TRACE_WARMUP=10000 TRACE_BODY_LEN=-1 TRACE_BODY_LEN_MIN=0 TRACE_BODY_LEN_MAX=15 TRACE_SEED=1"
 	@echo "  TRACE_DEEP_LEN=0 TRACE_DEEP_PERIOD=2048 TRACE_DEEP_START=0"
 	@echo "  TRACE_CFG=default|tiny|wide CORE_LATENCY=1|2 AGE_INTERVAL=4096 TRACE_DBG_CYCLES=40"
-	@echo "  MERMAID_PATTERN=mixed MERMAID_WORKSET=8 MERMAID_STEPS=12 MERMAID_DEEP_LEN=0 MERMAID_OUT=sim/01/branch_pattern_mixed.txt"
+	@echo "  MERMAID_PATTERN=mixed MERMAID_WORKSET=8 MERMAID_FULLSET=0 MERMAID_STEPS=12 MERMAID_DEEP_LEN=0 MERMAID_PREDICTOR=none MERMAID_OUT=sim/01/branch_pattern_mixed.txt"

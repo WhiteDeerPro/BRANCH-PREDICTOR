@@ -14,11 +14,18 @@ The generated text is deliberately conservative Mermaid syntax:
 ## Generate
 
 ```bash
+make mermaid_suite
 make mermaid MERMAID_PATTERN=loop MERMAID_WORKSET=6 MERMAID_STEPS=12
 make mermaid MERMAID_PATTERN=nested MERMAID_WORKSET=6 MERMAID_STEPS=12
 make mermaid MERMAID_PATTERN=correlated MERMAID_WORKSET=8 MERMAID_STEPS=12
 make mermaid MERMAID_PATTERN=random MERMAID_WORKSET=8 MERMAID_STEPS=12 MERMAID_SEED=3
 make mermaid MERMAID_PATTERN=mixed MERMAID_WORKSET=10 MERMAID_STEPS=18 MERMAID_DEEP_LEN=6
+```
+
+`make mermaid_suite` writes the standard set of diagrams to:
+
+```text
+docs/mermaid_txt/
 ```
 
 Default output path:
@@ -39,6 +46,49 @@ graph LR
 
 For Mermaid Live Editor or `mmdc`, use the raw generated `.txt` contents
 directly.
+
+## Space Model
+
+The diagrams separate three related sets.
+
+`full space`: the larger program address/control-flow universe. Nodes named
+`F8`, `F9`, and so on are in this full space but not in the current work set.
+They are drawn so the reader can see that the benchmark fragment is only a
+subset of possible program behavior.
+
+`work set`: the static branch blocks repeatedly exercised by the generated
+program fragment. Work-set nodes are named `W0`, `W1`, and so on. Black arrows
+are the legal static branch targets inside this work set:
+
+```text
+W0 --NT0--> W1
+W0 --TK1--> W0
+```
+
+`prediction set`: optional blue arrows generated with `MERMAID_PREDICTOR`.
+They are not the real RTL predictor state; they are a visualization aid for
+showing what it means for a predictor to cover or choose a path.
+
+Actual dynamic execution is shown by thick red arrows. A prediction error is
+visible when a blue prediction arrow and the red actual arrow from the same
+source node go to different destinations.
+
+Example error/superset diagram:
+
+```bash
+make mermaid MERMAID_PATTERN=mixed MERMAID_WORKSET=8 MERMAID_FULLSET=16 \
+  MERMAID_STEPS=12 MERMAID_PREDICTOR=always_not_taken \
+  MERMAID_OUT=sim/01/predictor_error_sets.txt
+```
+
+In that example:
+
+- `F*` nodes are full-space-only nodes.
+- `W*` nodes are the active work set.
+- black arrows are the legal work-set branch space.
+- blue arrows are the predictor's selected set.
+- red arrows are the actual path.
+- blue != red from the same source means wrong prediction.
 
 ## Minimal Example
 

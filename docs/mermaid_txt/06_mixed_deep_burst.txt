@@ -1,0 +1,87 @@
+graph LR
+  INFO[pattern mixed  full 16  workset 10  steps 18]
+  LEGEND[black static  blue predicted  red actual]
+  B0((W0))
+  B1((W1))
+  B2((W2))
+  B3((W3))
+  B4((W4))
+  B5((W5))
+  B6((W6))
+  B7((W7))
+  B8((W8))
+  B9((W9))
+  F10[F10]
+  F11[F11]
+  F12[F12]
+  F13[F13]
+  F14[F14]
+  F15[F15]
+  B0 -->|NT0| B1
+  B0 -->|TK1| B0
+  B1 -->|NT0| B2
+  B1 -->|TK1| B1
+  B2 -->|NT0| B3
+  B2 -->|TK1| B2
+  B3 -->|NT0| B4
+  B3 -->|TK1| B3
+  B4 -->|NT0| B5
+  B4 -->|TK1| B4
+  B5 -->|NT0| B6
+  B5 -->|TK1| B5
+  B6 -->|NT0| B7
+  B6 -->|TK1| B5
+  B7 -->|NT0| B8
+  B7 -->|TK1| B2
+  B8 -->|NT0| B9
+  B8 -->|TK1| B2
+  B9 -->|NT0| B0
+  B9 -->|TK1| B6
+  B0 ==>|A0_TK| B0
+  B0 ==>|A1_TK| B0
+  B0 ==>|A2_TK| B0
+  B0 ==>|A3_TK| B0
+  B0 ==>|A4_TK| B0
+  B0 ==>|A5_TK| B1
+  B1 ==>|A6_TK| B2
+  B2 ==>|A7_TK| B3
+  B3 ==>|A8_TK| B4
+  B4 ==>|A9_TK| B5
+  B5 ==>|A10_NT| B1
+  B1 ==>|A11_TK| B1
+  B1 ==>|A12_TK| B1
+  B1 ==>|A13_TK| B1
+  B1 ==>|A14_TK| B1
+  B1 ==>|A15_TK| B1
+  B1 ==>|A16_TK| B1
+  B1 ==>|A17_TK| B1
+  B1 ==>|A18_TK| B1
+  B1 ==>|A19_TK| B1
+  B1 ==>|A20_TK| B1
+  B1 ==>|A21_TK| B1
+  B1 ==>|A22_TK| B1
+  B1 ==>|A23_TK| B1
+  linkStyle 20 stroke:red,stroke-width:3px;
+  linkStyle 21 stroke:red,stroke-width:3px;
+  linkStyle 22 stroke:red,stroke-width:3px;
+  linkStyle 23 stroke:red,stroke-width:3px;
+  linkStyle 24 stroke:red,stroke-width:3px;
+  linkStyle 25 stroke:red,stroke-width:3px;
+  linkStyle 26 stroke:red,stroke-width:3px;
+  linkStyle 27 stroke:red,stroke-width:3px;
+  linkStyle 28 stroke:red,stroke-width:3px;
+  linkStyle 29 stroke:red,stroke-width:3px;
+  linkStyle 30 stroke:red,stroke-width:3px;
+  linkStyle 31 stroke:red,stroke-width:3px;
+  linkStyle 32 stroke:red,stroke-width:3px;
+  linkStyle 33 stroke:red,stroke-width:3px;
+  linkStyle 34 stroke:red,stroke-width:3px;
+  linkStyle 35 stroke:red,stroke-width:3px;
+  linkStyle 36 stroke:red,stroke-width:3px;
+  linkStyle 37 stroke:red,stroke-width:3px;
+  linkStyle 38 stroke:red,stroke-width:3px;
+  linkStyle 39 stroke:red,stroke-width:3px;
+  linkStyle 40 stroke:red,stroke-width:3px;
+  linkStyle 41 stroke:red,stroke-width:3px;
+  linkStyle 42 stroke:red,stroke-width:3px;
+  linkStyle 43 stroke:red,stroke-width:3px;

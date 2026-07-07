@@ -113,10 +113,24 @@ def branch_result(
     return rng.bit()
 
 
-def dynamic_path(args: argparse.Namespace) -> list[tuple[int, int, int]]:
+def predict_result(mode: str, actual: int, last_result: int) -> int | None:
+    if mode == "none":
+        return None
+    if mode == "always_taken":
+        return 1
+    if mode == "always_not_taken":
+        return 0
+    if mode == "last_outcome":
+        return last_result
+    if mode == "inverse_actual":
+        return 0 if actual else 1
+    raise ValueError(f"unknown predictor mode: {mode}")
+
+
+def dynamic_path(args: argparse.Namespace) -> list[tuple[int, int, int, int | None, int | None]]:
     rng = XorShift32(args.seed)
     states = build_states(args.workset, args.seed)
-    path: list[tuple[int, int, int]] = []
+    path: list[tuple[int, int, int, int | None, int | None]] = []
     current_idx = 0
     last_result = 0
 
@@ -124,12 +138,20 @@ def dynamic_path(args: argparse.Namespace) -> list[tuple[int, int, int]]:
         if args.deep_len > 0 and step == args.deep_at:
             normal_next, _ = branch_targets(current_idx, args.workset, args.pattern)
             deep_start = args.deep_start % args.workset
-            path.append((current_idx, 1, deep_start))
+            pred = predict_result(args.predictor, 1, last_result)
+            pred_dst = None if pred is None else (deep_start if pred else normal_next)
+            path.append((current_idx, 1, deep_start, pred, pred_dst))
             for pos in range(args.deep_len):
                 src = (deep_start + pos) % args.workset
                 is_last = pos == args.deep_len - 1
+                result = 0 if is_last else 1
                 dst = normal_next if is_last else (deep_start + pos + 1) % args.workset
-                path.append((src, 0 if is_last else 1, dst))
+                pred = predict_result(args.predictor, result, last_result)
+                nt_idx = normal_next
+                tk_idx = (deep_start + pos + 1) % args.workset
+                pred_dst = None if pred is None else (tk_idx if pred else nt_idx)
+                path.append((src, result, dst, pred, pred_dst))
+                last_result = result
             current_idx = normal_next
             last_result = 0
             continue
@@ -137,7 +159,9 @@ def dynamic_path(args: argparse.Namespace) -> list[tuple[int, int, int]]:
         result = branch_result(current_idx, args.pattern, states, rng, last_result)
         nt_idx, tk_idx = branch_targets(current_idx, args.workset, args.pattern)
         next_idx = tk_idx if result else nt_idx
-        path.append((current_idx, result, next_idx))
+        pred = predict_result(args.predictor, result, last_result)
+        pred_dst = None if pred is None else (tk_idx if pred else nt_idx)
+        path.append((current_idx, result, next_idx, pred, pred_dst))
         current_idx = next_idx
         last_result = result
 
@@ -147,18 +171,28 @@ def dynamic_path(args: argparse.Namespace) -> list[tuple[int, int, int]]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--workset", type=int, default=8)
+    parser.add_argument("--fullset", type=int, default=0,
+                        help="Full program-space node count. 0 means equal to --workset.")
     parser.add_argument("--pattern", choices=["loop", "nested", "correlated", "random", "mixed"], default="mixed")
     parser.add_argument("--steps", type=int, default=12)
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--deep-len", type=int, default=0)
     parser.add_argument("--deep-at", type=int, default=4)
     parser.add_argument("--deep-start", type=int, default=0)
+    parser.add_argument("--predictor",
+                        choices=["none", "always_taken", "always_not_taken", "last_outcome", "inverse_actual"],
+                        default="none",
+                        help="Optional simple predictor overlay used only for diagrams.")
     parser.add_argument("--fenced", action="store_true",
                         help="Wrap output in a ```mermaid fenced code block.")
     args = parser.parse_args()
 
     if args.workset <= 0:
         raise SystemExit("--workset must be positive")
+    if args.fullset == 0:
+        args.fullset = args.workset
+    if args.fullset < args.workset:
+        raise SystemExit("--fullset must be >= --workset")
     if args.steps <= 0:
         raise SystemExit("--steps must be positive")
     if args.deep_len < 0:
@@ -168,9 +202,12 @@ def main() -> None:
         print("```mermaid")
 
     print("graph LR")
-    print(f"  INFO[pattern {args.pattern}  workset {args.workset}  steps {args.steps}]")
+    print(f"  INFO[pattern {args.pattern}  full {args.fullset}  workset {args.workset}  steps {args.steps}]")
+    print("  LEGEND[black static  blue predicted  red actual]")
     for idx in range(args.workset):
-        print(f"  B{idx}((B{idx}))")
+        print(f"  B{idx}((W{idx}))")
+    for idx in range(args.workset, args.fullset):
+        print(f"  F{idx}[F{idx}]")
 
     for idx in range(args.workset):
         nt_idx, tk_idx = branch_targets(idx, args.workset, args.pattern)
@@ -178,12 +215,21 @@ def main() -> None:
         print(f"  B{idx} -->|TK1| B{tk_idx}")
 
     path = dynamic_path(args)
-    for step, (src, result, dst) in enumerate(path):
+    for step, (src, result, _dst, pred, pred_dst) in enumerate(path):
+        if pred is None or pred_dst is None:
+            continue
+        label = f"P{step}_{'TK' if pred else 'NT'}"
+        print(f"  B{src} -->|{label}| B{pred_dst}")
+
+    for step, (src, result, dst, _pred, _pred_dst) in enumerate(path):
         label = f"A{step}_{'TK' if result else 'NT'}"
         print(f"  B{src} ==>|{label}| B{dst}")
 
     static_edges = args.workset * 2
-    for edge_idx in range(static_edges, static_edges + len(path)):
+    pred_edges = 0 if args.predictor == "none" else len(path)
+    for edge_idx in range(static_edges, static_edges + pred_edges):
+        print(f"  linkStyle {edge_idx} stroke:blue,stroke-width:2px;")
+    for edge_idx in range(static_edges + pred_edges, static_edges + pred_edges + len(path)):
         print(f"  linkStyle {edge_idx} stroke:red,stroke-width:3px;")
 
     if args.fenced:
