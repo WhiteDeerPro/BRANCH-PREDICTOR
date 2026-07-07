@@ -124,6 +124,8 @@ def predict_result(mode: str, actual: int, last_result: int) -> int | None:
         return last_result
     if mode == "inverse_actual":
         return 0 if actual else 1
+    if mode == "escape_full":
+        return 1
     raise ValueError(f"unknown predictor mode: {mode}")
 
 
@@ -135,21 +137,34 @@ def dynamic_path(args: argparse.Namespace) -> list[tuple[int, int, int, int | No
     last_result = 0
 
     for step in range(args.steps):
+        draw_prediction = args.predictor != "none" and (
+            args.predict_steps == 0 or step < args.predict_steps
+        )
         if args.deep_len > 0 and step == args.deep_at:
             normal_next, _ = branch_targets(current_idx, args.workset, args.pattern)
             deep_start = args.deep_start % args.workset
-            pred = predict_result(args.predictor, 1, last_result)
-            pred_dst = None if pred is None else (deep_start if pred else normal_next)
+            pred = predict_result(args.predictor, 1, last_result) if draw_prediction else None
+            if args.predictor == "escape_full" and draw_prediction and args.fullset > args.workset:
+                pred_dst = args.workset + (step % (args.fullset - args.workset))
+            else:
+                pred_dst = None if pred is None else (deep_start if pred else normal_next)
             path.append((current_idx, 1, deep_start, pred, pred_dst))
             for pos in range(args.deep_len):
                 src = (deep_start + pos) % args.workset
                 is_last = pos == args.deep_len - 1
                 result = 0 if is_last else 1
                 dst = normal_next if is_last else (deep_start + pos + 1) % args.workset
-                pred = predict_result(args.predictor, result, last_result)
+                deep_step = step + pos + 1
+                draw_deep_prediction = args.predictor != "none" and (
+                    args.predict_steps == 0 or deep_step < args.predict_steps
+                )
+                pred = predict_result(args.predictor, result, last_result) if draw_deep_prediction else None
                 nt_idx = normal_next
                 tk_idx = (deep_start + pos + 1) % args.workset
-                pred_dst = None if pred is None else (tk_idx if pred else nt_idx)
+                if args.predictor == "escape_full" and draw_deep_prediction and args.fullset > args.workset:
+                    pred_dst = args.workset + (deep_step % (args.fullset - args.workset))
+                else:
+                    pred_dst = None if pred is None else (tk_idx if pred else nt_idx)
                 path.append((src, result, dst, pred, pred_dst))
                 last_result = result
             current_idx = normal_next
@@ -159,8 +174,11 @@ def dynamic_path(args: argparse.Namespace) -> list[tuple[int, int, int, int | No
         result = branch_result(current_idx, args.pattern, states, rng, last_result)
         nt_idx, tk_idx = branch_targets(current_idx, args.workset, args.pattern)
         next_idx = tk_idx if result else nt_idx
-        pred = predict_result(args.predictor, result, last_result)
-        pred_dst = None if pred is None else (tk_idx if pred else nt_idx)
+        pred = predict_result(args.predictor, result, last_result) if draw_prediction else None
+        if args.predictor == "escape_full" and draw_prediction and args.fullset > args.workset:
+            pred_dst = args.workset + (step % (args.fullset - args.workset))
+        else:
+            pred_dst = None if pred is None else (tk_idx if pred else nt_idx)
         path.append((current_idx, result, next_idx, pred, pred_dst))
         current_idx = next_idx
         last_result = result
@@ -180,9 +198,11 @@ def main() -> None:
     parser.add_argument("--deep-at", type=int, default=4)
     parser.add_argument("--deep-start", type=int, default=0)
     parser.add_argument("--predictor",
-                        choices=["none", "always_taken", "always_not_taken", "last_outcome", "inverse_actual"],
+                        choices=["none", "always_taken", "always_not_taken", "last_outcome", "inverse_actual", "escape_full"],
                         default="none",
                         help="Optional simple predictor overlay used only for diagrams.")
+    parser.add_argument("--predict-steps", type=int, default=0,
+                        help="Limit drawn prediction edges. 0 means all dynamic steps.")
     parser.add_argument("--fenced", action="store_true",
                         help="Wrap output in a ```mermaid fenced code block.")
     args = parser.parse_args()
@@ -197,6 +217,8 @@ def main() -> None:
         raise SystemExit("--steps must be positive")
     if args.deep_len < 0:
         raise SystemExit("--deep-len must be non-negative")
+    if args.predict_steps < 0:
+        raise SystemExit("--predict-steps must be non-negative")
 
     if args.fenced:
         print("```mermaid")
@@ -219,14 +241,16 @@ def main() -> None:
         if pred is None or pred_dst is None:
             continue
         label = f"P{step}_{'TK' if pred else 'NT'}"
-        print(f"  B{src} -->|{label}| B{pred_dst}")
+        dst_name = f"B{pred_dst}" if pred_dst < args.workset else f"F{pred_dst}"
+        print(f"  B{src} -->|{label}| {dst_name}")
 
     for step, (src, result, dst, _pred, _pred_dst) in enumerate(path):
         label = f"A{step}_{'TK' if result else 'NT'}"
         print(f"  B{src} ==>|{label}| B{dst}")
 
     static_edges = args.workset * 2
-    pred_edges = 0 if args.predictor == "none" else len(path)
+    pred_edges = sum(1 for _src, _result, _dst, pred, pred_dst in path
+                     if pred is not None and pred_dst is not None)
     for edge_idx in range(static_edges, static_edges + pred_edges):
         print(f"  linkStyle {edge_idx} stroke:blue,stroke-width:2px;")
     for edge_idx in range(static_edges + pred_edges, static_edges + pred_edges + len(path)):

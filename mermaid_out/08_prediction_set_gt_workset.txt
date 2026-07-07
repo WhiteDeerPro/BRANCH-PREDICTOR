@@ -1,0 +1,83 @@
+graph LR
+  INFO[pattern mixed  full 16  workset 8  steps 12]
+  LEGEND[black static  blue predicted  red actual]
+  B0((W0))
+  B1((W1))
+  B2((W2))
+  B3((W3))
+  B4((W4))
+  B5((W5))
+  B6((W6))
+  B7((W7))
+  F8[F8]
+  F9[F9]
+  F10[F10]
+  F11[F11]
+  F12[F12]
+  F13[F13]
+  F14[F14]
+  F15[F15]
+  B0 -->|NT0| B1
+  B0 -->|TK1| B0
+  B1 -->|NT0| B2
+  B1 -->|TK1| B1
+  B2 -->|NT0| B3
+  B2 -->|TK1| B2
+  B3 -->|NT0| B4
+  B3 -->|TK1| B3
+  B4 -->|NT0| B5
+  B4 -->|TK1| B4
+  B5 -->|NT0| B6
+  B5 -->|TK1| B5
+  B6 -->|NT0| B7
+  B6 -->|TK1| B1
+  B7 -->|NT0| B0
+  B7 -->|TK1| B2
+  B0 -->|P0_TK| F8
+  B0 -->|P1_TK| F9
+  B0 -->|P2_TK| F10
+  B0 -->|P3_TK| F11
+  B0 -->|P4_TK| F12
+  B1 -->|P5_TK| F13
+  B1 -->|P6_TK| F14
+  B1 -->|P7_TK| F15
+  B1 -->|P8_TK| F8
+  B1 -->|P9_TK| F9
+  B1 -->|P10_TK| F10
+  B1 -->|P11_TK| F11
+  B0 ==>|A0_TK| B0
+  B0 ==>|A1_TK| B0
+  B0 ==>|A2_TK| B0
+  B0 ==>|A3_TK| B0
+  B0 ==>|A4_NT| B1
+  B1 ==>|A5_TK| B1
+  B1 ==>|A6_TK| B1
+  B1 ==>|A7_TK| B1
+  B1 ==>|A8_TK| B1
+  B1 ==>|A9_TK| B1
+  B1 ==>|A10_TK| B1
+  B1 ==>|A11_TK| B1
+  linkStyle 16 stroke:blue,stroke-width:2px;
+  linkStyle 17 stroke:blue,stroke-width:2px;
+  linkStyle 18 stroke:blue,stroke-width:2px;
+  linkStyle 19 stroke:blue,stroke-width:2px;
+  linkStyle 20 stroke:blue,stroke-width:2px;
+  linkStyle 21 stroke:blue,stroke-width:2px;
+  linkStyle 22 stroke:blue,stroke-width:2px;
+  linkStyle 23 stroke:blue,stroke-width:2px;
+  linkStyle 24 stroke:blue,stroke-width:2px;
+  linkStyle 25 stroke:blue,stroke-width:2px;
+  linkStyle 26 stroke:blue,stroke-width:2px;
+  linkStyle 27 stroke:blue,stroke-width:2px;
+  linkStyle 28 stroke:red,stroke-width:3px;
+  linkStyle 29 stroke:red,stroke-width:3px;
+  linkStyle 30 stroke:red,stroke-width:3px;
+  linkStyle 31 stroke:red,stroke-width:3px;
+  linkStyle 32 stroke:red,stroke-width:3px;
+  linkStyle 33 stroke:red,stroke-width:3px;
+  linkStyle 34 stroke:red,stroke-width:3px;
+  linkStyle 35 stroke:red,stroke-width:3px;
+  linkStyle 36 stroke:red,stroke-width:3px;
+  linkStyle 37 stroke:red,stroke-width:3px;
+  linkStyle 38 stroke:red,stroke-width:3px;
+  linkStyle 39 stroke:red,stroke-width:3px;

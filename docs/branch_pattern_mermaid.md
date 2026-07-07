@@ -25,13 +25,13 @@ make mermaid MERMAID_PATTERN=mixed MERMAID_WORKSET=10 MERMAID_STEPS=18 MERMAID_D
 `make mermaid_suite` writes the standard set of diagrams to:
 
 ```text
-docs/mermaid_txt/
+mermaid_out/
 ```
 
 Default output path:
 
 ```text
-sim/01/branch_pattern_<pattern>.txt
+mermaid_out/branch_pattern_<pattern>.txt
 ```
 
 For GitHub Markdown, wrap the generated text manually:
@@ -78,7 +78,7 @@ Example error/superset diagram:
 ```bash
 make mermaid MERMAID_PATTERN=mixed MERMAID_WORKSET=8 MERMAID_FULLSET=16 \
   MERMAID_STEPS=12 MERMAID_PREDICTOR=always_not_taken \
-  MERMAID_OUT=sim/01/predictor_error_sets.txt
+  MERMAID_OUT=mermaid_out/predictor_error_sets.txt
 ```
 
 In that example:
@@ -89,6 +89,27 @@ In that example:
 - blue arrows are the predictor's selected set.
 - red arrows are the actual path.
 - blue != red from the same source means wrong prediction.
+
+The standard suite includes three set-relation examples:
+
+```text
+07_workset_gt_prediction_set.txt
+08_prediction_set_gt_workset.txt
+09_predictor_error_sets.txt
+```
+
+`07_workset_gt_prediction_set.txt` limits the number of blue prediction edges,
+so the work set contains more branch nodes/possibilities than the drawn
+prediction set.
+
+`08_prediction_set_gt_workset.txt` uses `MERMAID_PREDICTOR=escape_full`, so
+some blue prediction edges point into `F*` nodes outside the active `W*` work
+set. This illustrates a predictor set that is larger than, or has escaped, the
+current work set.
+
+`09_predictor_error_sets.txt` keeps predictions inside the work set but chooses
+a simple always-not-taken policy, making blue-vs-red direction mismatches easy
+to see.
 
 ## Minimal Example
 

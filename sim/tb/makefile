@@ -46,8 +46,9 @@ MERMAID_DEEP_LEN ?= 0
 MERMAID_DEEP_AT  ?= 4
 MERMAID_DEEP_START ?= 0
 MERMAID_PREDICTOR ?= none
-MERMAID_OUT ?= $(RUN_DIR)/branch_pattern_$(MERMAID_PATTERN).txt
-MERMAID_DIR ?= docs/mermaid_txt
+MERMAID_PREDICT_STEPS ?= 0
+MERMAID_DIR ?= mermaid_out
+MERMAID_OUT ?= $(MERMAID_DIR)/branch_pattern_$(MERMAID_PATTERN).txt
 
 VCS_FLAGS := -sverilog \
              -debug_access+all \
@@ -212,7 +213,7 @@ mermaid:
 	@echo "=================================================="
 	@echo " [MERMAID] generating $(MERMAID_OUT)"
 	@echo "=================================================="
-	cd $(PROJ_ROOT) && mkdir -p $(RUN_DIR) && python3 sim/tb/gen_mermaid.py \
+	cd $(PROJ_ROOT) && mkdir -p $(MERMAID_DIR) && python3 sim/tb/gen_mermaid.py \
 		--pattern $(MERMAID_PATTERN) \
 		--workset $(MERMAID_WORKSET) \
 		--fullset $(MERMAID_FULLSET) \
@@ -222,6 +223,7 @@ mermaid:
 		--deep-at $(MERMAID_DEEP_AT) \
 		--deep-start $(MERMAID_DEEP_START) \
 		--predictor $(MERMAID_PREDICTOR) \
+		--predict-steps $(MERMAID_PREDICT_STEPS) \
 		> $(MERMAID_OUT)
 	@echo " [MERMAID] done: $(MERMAID_OUT)"
 
@@ -235,7 +237,9 @@ mermaid_suite:
 	cd $(PROJ_ROOT) && mkdir -p $(MERMAID_DIR) && python3 sim/tb/gen_mermaid.py --pattern random --workset 8 --fullset 12 --steps 14 --seed 3 > $(MERMAID_DIR)/04_random_workset.txt
 	cd $(PROJ_ROOT) && mkdir -p $(MERMAID_DIR) && python3 sim/tb/gen_mermaid.py --pattern mixed --workset 10 --fullset 16 --steps 18 --seed 1 > $(MERMAID_DIR)/05_mixed_workset.txt
 	cd $(PROJ_ROOT) && mkdir -p $(MERMAID_DIR) && python3 sim/tb/gen_mermaid.py --pattern mixed --workset 10 --fullset 16 --steps 18 --seed 1 --deep-len 6 --deep-at 4 > $(MERMAID_DIR)/06_mixed_deep_burst.txt
-	cd $(PROJ_ROOT) && mkdir -p $(MERMAID_DIR) && python3 sim/tb/gen_mermaid.py --pattern mixed --workset 8 --fullset 16 --steps 12 --seed 1 --predictor always_not_taken > $(MERMAID_DIR)/07_predictor_error_sets.txt
+	cd $(PROJ_ROOT) && mkdir -p $(MERMAID_DIR) && python3 sim/tb/gen_mermaid.py --pattern mixed --workset 10 --fullset 16 --steps 12 --seed 1 --predictor last_outcome --predict-steps 4 > $(MERMAID_DIR)/07_workset_gt_prediction_set.txt
+	cd $(PROJ_ROOT) && mkdir -p $(MERMAID_DIR) && python3 sim/tb/gen_mermaid.py --pattern mixed --workset 8 --fullset 16 --steps 12 --seed 1 --predictor escape_full > $(MERMAID_DIR)/08_prediction_set_gt_workset.txt
+	cd $(PROJ_ROOT) && mkdir -p $(MERMAID_DIR) && python3 sim/tb/gen_mermaid.py --pattern mixed --workset 8 --fullset 16 --steps 12 --seed 1 --predictor always_not_taken > $(MERMAID_DIR)/09_predictor_error_sets.txt
 	@echo " [MERMAID] done: $(MERMAID_DIR)"
 
 help:
@@ -258,4 +262,4 @@ help:
 	@echo "  TRACE_WARMUP=10000 TRACE_BODY_LEN=-1 TRACE_BODY_LEN_MIN=0 TRACE_BODY_LEN_MAX=15 TRACE_SEED=1"
 	@echo "  TRACE_DEEP_LEN=0 TRACE_DEEP_PERIOD=2048 TRACE_DEEP_START=0"
 	@echo "  TRACE_CFG=default|tiny|wide CORE_LATENCY=1|2 AGE_INTERVAL=4096 TRACE_DBG_CYCLES=40"
-	@echo "  MERMAID_PATTERN=mixed MERMAID_WORKSET=8 MERMAID_FULLSET=0 MERMAID_STEPS=12 MERMAID_DEEP_LEN=0 MERMAID_PREDICTOR=none MERMAID_OUT=sim/01/branch_pattern_mixed.txt"
+	@echo "  MERMAID_PATTERN=mixed MERMAID_WORKSET=8 MERMAID_FULLSET=0 MERMAID_STEPS=12 MERMAID_DEEP_LEN=0 MERMAID_PREDICTOR=none MERMAID_PREDICT_STEPS=0 MERMAID_OUT=mermaid_out/branch_pattern_mixed.txt"

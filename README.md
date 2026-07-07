@@ -216,7 +216,7 @@ make trace TRACE_DBG_CYCLES=0
 ```
 
 Mermaid branch-pattern diagrams are written as raw Mermaid text to
-`MERMAID_OUT`, defaulting to `sim/01/branch_pattern_<pattern>.txt`:
+`MERMAID_OUT`, defaulting to `mermaid_out/branch_pattern_<pattern>.txt`:
 
 ```bash
 make mermaid_suite
@@ -224,12 +224,12 @@ make mermaid MERMAID_PATTERN=loop MERMAID_WORKSET=6 MERMAID_STEPS=12
 make mermaid MERMAID_PATTERN=correlated MERMAID_WORKSET=8 MERMAID_STEPS=12
 make mermaid MERMAID_PATTERN=mixed MERMAID_WORKSET=10 MERMAID_STEPS=18 MERMAID_DEEP_LEN=6
 make mermaid MERMAID_PATTERN=mixed MERMAID_WORKSET=8 MERMAID_FULLSET=16 MERMAID_PREDICTOR=always_not_taken
-make mermaid MERMAID_PATTERN=mixed MERMAID_OUT=sim/01/mixed_mermaid.txt
+make mermaid MERMAID_PATTERN=mixed MERMAID_OUT=mermaid_out/mixed_mermaid.txt
 ```
 
 See `docs/branch_pattern_mermaid.md` for static program-space arrows and red
 actual-path examples. The standard generated txt set is kept under
-`docs/mermaid_txt/`. Wrap the generated text in a `mermaid` fenced code block
+`mermaid_out/`. Wrap the generated text in a `mermaid` fenced code block
 only when embedding it into Markdown.
 
 ## Important Trace Signals
