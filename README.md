@@ -6,6 +6,12 @@ predictors such as gshare, ITTAGE, or other variants can be added beside it.
 
 Repository: `WhiteDeerPro/BRANCH-PREDICTOR`
 
+## Contributors
+
+- WhiteDeerPro <1207707136@qq.com>
+- 10kyfu <2194438514@qq.com>
+- strive2021 <xiligongda@outlook.com>
+
 ## Current Predictor: TAGE
 
 The current design separates committed branch history from speculative history:
