@@ -280,28 +280,51 @@ module tage_predictor_core #(
         end
     endfunction
 
-    always_ff @(posedge i_clk or negedge i_rst_n) begin
-        if (!i_rst_n) begin
-            use_alt_ctr     <= USE_ALT_CTR_INIT[USE_ALT_CTR_W-1:0];
-            alloc_lfsr      <= 16'hace1;
-            alloc_fail_tick <= '0;
-        end else begin
-            use_alt_ctr <= use_alt_ctr_next;
-            if (predict_decision_vld || update_vld)
-                alloc_lfsr <= {alloc_lfsr[14:0],
-                               alloc_lfsr[15] ^ alloc_lfsr[13] ^ alloc_lfsr[12] ^ alloc_lfsr[10]};
-            if (update_vld && do_alloc && !alloc_vld_restore) begin
-                if (alloc_fail_tick != {ALLOC_FAIL_TICK_W{1'b1}})
-                    alloc_fail_tick <= alloc_fail_tick + 1'b1;
-            end else if (update_vld && do_alloc && alloc_vld_restore) begin
-                if (alloc_fail_tick != '0)
-                    alloc_fail_tick <= alloc_fail_tick - 1'b1;
+    generate
+        if (USE_ALT_ON_NA) begin : GEN_USE_ALT_MONITOR
+            always_ff @(posedge i_clk or negedge i_rst_n) begin
+                if (!i_rst_n)
+                    use_alt_ctr <= USE_ALT_CTR_INIT[USE_ALT_CTR_W-1:0];
+                else
+                    use_alt_ctr <= use_alt_ctr_next;
             end
+        end else begin : GEN_NO_USE_ALT_MONITOR
+            assign use_alt_ctr = '0;
         end
-    end
+    endgenerate
 
-    assign alloc_fail_dec_fire = ALLOC_FAIL_DEC_U &&
-                                 (alloc_lfsr[ALLOC_FAIL_TICK_W-1:0] <= alloc_fail_tick);
+    generate
+        if ((ALLOC_POLICY == tage_pkg::ALLOC_POLICY_LFSR_START) || ALLOC_FAIL_DEC_U) begin : GEN_ALLOC_RANDOM_STATE
+            always_ff @(posedge i_clk or negedge i_rst_n) begin
+                if (!i_rst_n) begin
+                    alloc_lfsr      <= 16'hace1;
+                    alloc_fail_tick <= '0;
+                end else begin
+                    if (predict_decision_vld || update_vld)
+                        alloc_lfsr <= {alloc_lfsr[14:0],
+                                       alloc_lfsr[15] ^ alloc_lfsr[13] ^ alloc_lfsr[12] ^ alloc_lfsr[10]};
+                    if (ALLOC_FAIL_DEC_U) begin
+                        if (update_vld && do_alloc && !alloc_vld_restore) begin
+                            if (alloc_fail_tick != {ALLOC_FAIL_TICK_W{1'b1}})
+                                alloc_fail_tick <= alloc_fail_tick + 1'b1;
+                        end else if (update_vld && do_alloc && alloc_vld_restore) begin
+                            if (alloc_fail_tick != '0)
+                                alloc_fail_tick <= alloc_fail_tick - 1'b1;
+                        end
+                    end else begin
+                        alloc_fail_tick <= '0;
+                    end
+                end
+            end
+        end else begin : GEN_NO_ALLOC_RANDOM_STATE
+            assign alloc_lfsr      = 16'hace1;
+            assign alloc_fail_tick = '0;
+        end
+    endgenerate
+
+    assign alloc_fail_dec_fire = ALLOC_FAIL_DEC_U ?
+                                 (alloc_lfsr[ALLOC_FAIL_TICK_W-1:0] <= alloc_fail_tick) :
+                                 1'b0;
 
     function automatic logic [BIMODAL_IDX_W-1:0] fold_pc_bimodal(input logic [31:0] pc);
         fold_pc_bimodal = '0;
@@ -764,18 +787,23 @@ module tage_predictor_core #(
     wire alt_pred_dir      = alt_ctr_restore[TAG_CTR_W-1];
     wire alt_wrong         = (alt_pred_dir != actual_taken_restore);
 
-    always_comb begin
-        use_alt_ctr_next = use_alt_ctr;
-        if (update_vld &&
-            USE_ALT_ON_NA &&
-            provider_id_restore != NUM_TABLES &&
-            ((provider_ctr_restore == {1'b0, {(TAG_CTR_W-1){1'b1}}}) ||
-             (provider_ctr_restore == {1'b1, {(TAG_CTR_W-1){1'b0}}})) &&
-            (!USE_ALT_REQUIRE_U_ZERO || provider_useful_restore == '0) &&
-            (provider_pred_dir != alt_pred_dir)) begin
-            use_alt_ctr_next = sat_signed_update(use_alt_ctr, alt_pred_dir == actual_taken_restore);
+    generate
+        if (USE_ALT_ON_NA) begin : GEN_USE_ALT_NEXT
+            always_comb begin
+                use_alt_ctr_next = use_alt_ctr;
+                if (update_vld &&
+                    provider_id_restore != NUM_TABLES &&
+                    ((provider_ctr_restore == {1'b0, {(TAG_CTR_W-1){1'b1}}}) ||
+                     (provider_ctr_restore == {1'b1, {(TAG_CTR_W-1){1'b0}}})) &&
+                    (!USE_ALT_REQUIRE_U_ZERO || provider_useful_restore == '0) &&
+                    (provider_pred_dir != alt_pred_dir)) begin
+                    use_alt_ctr_next = sat_signed_update(use_alt_ctr, alt_pred_dir == actual_taken_restore);
+                end
+            end
+        end else begin : GEN_NO_USE_ALT_NEXT
+            assign use_alt_ctr_next = '0;
         end
-    end
+    endgenerate
 
     always_comb begin
         calc_provider_ctr    = provider_ctr_restore;

@@ -64,13 +64,20 @@ choosing the same table. The global aging mode scans tagged tables with a
 second read port and uses the existing write port at lower priority than real
 updates.
 
-For simulation sweeps, `STRATEGY_DEFINES` can override selected package
-defaults at compile time, for example:
+For simulation sweeps, make variables override selected strategy parameters in
+the testbench instance, for example:
 
 ```bash
-make trace STRATEGY_DEFINES="+define+TAGE_USE_ALT_ON_NA +define+TAGE_ALLOC_LFSR_START"
-make trace STRATEGY_DEFINES="+define+TAGE_U_AGING_GLOBAL"
+make trace USE_ALT_ON_NA=1 ALLOC_POLICY=1
+make trace U_AGING_MODE=2
 ```
+
+`U_AGING_MODE` uses `0=none`, `1=touched-entry decrement`, and
+`2=global u >>= 1 scan`; `ALLOC_POLICY` uses `0=first available` and
+`1=LFSR-biased start`.
+
+Recent sweep results are checked in as `docs/tage_strategy_matrix.csv` and
+`docs/tage_workset_capacity_sweep.csv`.
 
 ## Layout
 

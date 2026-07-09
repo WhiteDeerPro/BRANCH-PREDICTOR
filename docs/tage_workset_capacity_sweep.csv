@@ -1,0 +1,13 @@
+workset,pattern,strategy,branches,warmup,mismatch,pc_error,accuracy_percent
+4,correlated,default,10000,1000,0,0,56.70
+8,correlated,default,10000,1000,0,0,52.03
+16,correlated,default,10000,1000,0,0,53.06
+32,correlated,default,10000,1000,0,0,52.01
+64,correlated,default,10000,1000,0,0,50.73
+128,correlated,default,10000,1000,0,0,52.01
+4,loop,default,10000,1000,0,0,88.67
+8,loop,default,10000,1000,0,0,89.95
+16,loop,default,10000,1000,0,0,90.03
+32,loop,default,10000,1000,0,0,87.45
+64,loop,default,10000,1000,0,0,85.95
+128,loop,default,10000,1000,0,0,83.96

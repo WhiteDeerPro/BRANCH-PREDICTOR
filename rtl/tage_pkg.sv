@@ -24,28 +24,14 @@ package tage_pkg;
     localparam int ALLOC_POLICY_FIRST       = 0;
     localparam int ALLOC_POLICY_LFSR_START  = 1;
 
-`ifdef TAGE_U_AGING_GLOBAL
-    parameter int U_AGING_MODE          = AGE_MODE_GLOBAL_SHIFT;
-`elsif TAGE_U_AGING_NONE
-    parameter int U_AGING_MODE          = AGE_MODE_NONE;
-`else
     parameter int U_AGING_MODE          = AGE_MODE_TOUCHED_DEC;
-`endif
     parameter int U_RESET_SCAN_ENTRIES  = MAX_TAGGED_ENTRIES;
-`ifdef TAGE_USE_ALT_ON_NA
-    parameter bit USE_ALT_ON_NA         = 1'b1;
-`else
     parameter bit USE_ALT_ON_NA         = 1'b0;
-`endif
     parameter int USE_ALT_CTR_W         = 4;
     parameter int USE_ALT_CTR_INIT      = 0;
     parameter bit USE_ALT_REQUIRE_U_ZERO = 1'b1;
     parameter bit UPDATE_ALT_ON_U_ZERO  = 1'b1;
-`ifdef TAGE_ALLOC_LFSR_START
-    parameter int ALLOC_POLICY          = ALLOC_POLICY_LFSR_START;
-`else
     parameter int ALLOC_POLICY          = ALLOC_POLICY_FIRST;
-`endif
     parameter bit ALLOC_FAIL_DEC_U      = 1'b1;
     parameter int ALLOC_FAIL_TICK_W     = 4;
 

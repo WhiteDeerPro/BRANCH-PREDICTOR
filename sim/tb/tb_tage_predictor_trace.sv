@@ -24,6 +24,26 @@ module tb_tage_predictor_trace;
 `endif
     localparam int FEEDBACK_DEPTH = PIPELINE_DEPTH - CORE_LATENCY;
     localparam int CLK_PERIOD     = 10;
+`ifdef TAGE_SIM_U_AGING_MODE
+    localparam int CFG_U_AGING_MODE = `TAGE_SIM_U_AGING_MODE;
+`else
+    localparam int CFG_U_AGING_MODE = tage_pkg::U_AGING_MODE;
+`endif
+`ifdef TAGE_SIM_USE_ALT_ON_NA
+    localparam bit CFG_USE_ALT_ON_NA = `TAGE_SIM_USE_ALT_ON_NA;
+`else
+    localparam bit CFG_USE_ALT_ON_NA = tage_pkg::USE_ALT_ON_NA;
+`endif
+`ifdef TAGE_SIM_ALLOC_POLICY
+    localparam int CFG_ALLOC_POLICY = `TAGE_SIM_ALLOC_POLICY;
+`else
+    localparam int CFG_ALLOC_POLICY = tage_pkg::ALLOC_POLICY;
+`endif
+`ifdef TAGE_SIM_ALLOC_FAIL_DEC_U
+    localparam bit CFG_ALLOC_FAIL_DEC_U = `TAGE_SIM_ALLOC_FAIL_DEC_U;
+`else
+    localparam bit CFG_ALLOC_FAIL_DEC_U = tage_pkg::ALLOC_FAIL_DEC_U;
+`endif
 
 `ifdef TAGE_CFG_TINY
     localparam int CFG_BIMODAL_SIZE = 256;
@@ -344,6 +364,10 @@ module tb_tage_predictor_trace;
         .PIPELINE_DEPTH    (PIPELINE_DEPTH),
         .CORE_LATENCY      (CORE_LATENCY),
         .AGE_INTERVAL      (AGE_INTERVAL),
+        .U_AGING_MODE      (CFG_U_AGING_MODE),
+        .USE_ALT_ON_NA     (CFG_USE_ALT_ON_NA),
+        .ALLOC_POLICY      (CFG_ALLOC_POLICY),
+        .ALLOC_FAIL_DEC_U  (CFG_ALLOC_FAIL_DEC_U),
         .BIMODAL_SIZE      (CFG_BIMODAL_SIZE),
         .HIST_LENS_LUT     (CFG_HIST_LENS_LUT),
         .TABLE_ENTRIES_LUT (CFG_TABLE_ENTRIES_LUT),
@@ -361,6 +385,10 @@ module tb_tage_predictor_trace;
     tage_predictor_core #(
         .PREDICT_LATENCY  (CORE_LATENCY),
         .AGE_INTERVAL     (AGE_INTERVAL),
+        .U_AGING_MODE     (CFG_U_AGING_MODE),
+        .USE_ALT_ON_NA    (CFG_USE_ALT_ON_NA),
+        .ALLOC_POLICY     (CFG_ALLOC_POLICY),
+        .ALLOC_FAIL_DEC_U (CFG_ALLOC_FAIL_DEC_U),
         .BIMODAL_SIZE      (CFG_BIMODAL_SIZE),
         .HIST_LENS_LUT     (CFG_HIST_LENS_LUT),
         .TABLE_ENTRIES_LUT (CFG_TABLE_ENTRIES_LUT),

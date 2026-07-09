@@ -18,6 +18,26 @@ module tb_tage_predictor_core;
 `else
     localparam AGE_INTERVAL = 4096;
 `endif
+`ifdef TAGE_SIM_U_AGING_MODE
+    localparam int CFG_U_AGING_MODE = `TAGE_SIM_U_AGING_MODE;
+`else
+    localparam int CFG_U_AGING_MODE = tage_pkg::U_AGING_MODE;
+`endif
+`ifdef TAGE_SIM_USE_ALT_ON_NA
+    localparam bit CFG_USE_ALT_ON_NA = `TAGE_SIM_USE_ALT_ON_NA;
+`else
+    localparam bit CFG_USE_ALT_ON_NA = tage_pkg::USE_ALT_ON_NA;
+`endif
+`ifdef TAGE_SIM_ALLOC_POLICY
+    localparam int CFG_ALLOC_POLICY = `TAGE_SIM_ALLOC_POLICY;
+`else
+    localparam int CFG_ALLOC_POLICY = tage_pkg::ALLOC_POLICY;
+`endif
+`ifdef TAGE_SIM_ALLOC_FAIL_DEC_U
+    localparam bit CFG_ALLOC_FAIL_DEC_U = `TAGE_SIM_ALLOC_FAIL_DEC_U;
+`else
+    localparam bit CFG_ALLOC_FAIL_DEC_U = tage_pkg::ALLOC_FAIL_DEC_U;
+`endif
     localparam ADDR_MIN   = 0;
     localparam ADDR_MAX   = 16;          // 0~252, step 4, 共64个地址
     localparam ADDR_STEP  = 4;
@@ -56,7 +76,11 @@ module tb_tage_predictor_core;
     // DUT 实例化（端口名匹配修改后的 core）
     tage_predictor_core #(
         .PREDICT_LATENCY(PREDICT_LATENCY),
-        .AGE_INTERVAL   (AGE_INTERVAL)
+        .AGE_INTERVAL   (AGE_INTERVAL),
+        .U_AGING_MODE   (CFG_U_AGING_MODE),
+        .USE_ALT_ON_NA  (CFG_USE_ALT_ON_NA),
+        .ALLOC_POLICY   (CFG_ALLOC_POLICY),
+        .ALLOC_FAIL_DEC_U(CFG_ALLOC_FAIL_DEC_U)
     ) core (
         .i_clk           (clk),
         .i_rst_n         (rst_n),
