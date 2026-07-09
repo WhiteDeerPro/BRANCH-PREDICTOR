@@ -28,6 +28,50 @@ The TAGE core also has two implementation-oriented controls:
 - `AGE_INTERVAL`: useful-bit aging interval. `0` disables aging; otherwise a
   periodic touched-entry aging writeback decrements nonzero useful bits.
 
+Default predictor sizing is centralized in `rtl/tage_pkg.sv`:
+
+| Table | History | Entries | Tag bits |
+| --- | ---: | ---: | ---: |
+| Bimodal | 0 | 2048 | 0 |
+| T1 | 6 | 512 | 9 |
+| T2 | 13 | 512 | 9 |
+| T3 | 27 | 256 | 9 |
+| T4 | 56 | 256 | 10 |
+| T5 | 130 | 128 | 12 |
+
+The tagged-table LUTs are written in natural `T1..T5` order. Internally, larger
+table ids mean longer histories, so provider lookup prefers higher ids and
+allocation searches higher ids than the current provider. Entry counts are not
+required to grow with history length; this default keeps shorter histories more
+dense and gives the longest histories fewer, wider entries.
+
+Update-policy parameters also live in `rtl/tage_pkg.sv`:
+
+| Parameter | Default | Meaning |
+| --- | ---: | --- |
+| `USE_ALT_ON_NA` | `0` | Use alternate prediction for weak newly allocated providers when `use_alt_ctr >= 0`. |
+| `USE_ALT_CTR_W` | `4` | Signed monitor width for alternate-on-newly-allocated selection. |
+| `USE_ALT_REQUIRE_U_ZERO` | `1` | Treat a provider as newly allocated only when weak and `u == 0`. |
+| `UPDATE_ALT_ON_U_ZERO` | `1` | Also train the alternate provider/base table when the longest provider has `u == 0`. |
+| `U_AGING_MODE` | `AGE_MODE_TOUCHED_DEC` | `NONE`, touched-entry decrement, or global `u >>= 1` scan. |
+| `ALLOC_POLICY` | `ALLOC_POLICY_FIRST` | First available longer table, or LFSR-biased start point. |
+| `ALLOC_FAIL_DEC_U` | `1` | On allocation failure, probabilistically decrement blocking longer-table `u` values. |
+
+These controls mirror common TAGE practice: alternate prediction is monitored
+with a small signed counter, useful counters are periodically aged, and
+allocation is biased toward shorter longer-history tables instead of always
+choosing the same table. The global aging mode scans tagged tables with a
+second read port and uses the existing write port at lower priority than real
+updates.
+
+For simulation sweeps, `STRATEGY_DEFINES` can override selected package
+defaults at compile time, for example:
+
+```bash
+make trace STRATEGY_DEFINES="+define+TAGE_USE_ALT_ON_NA +define+TAGE_ALLOC_LFSR_START"
+make trace STRATEGY_DEFINES="+define+TAGE_U_AGING_GLOBAL"
+```
+
 ## Layout
 
 ```text
@@ -275,6 +319,9 @@ The makefile normally generates traces automatically before `make trace`.
 ## Notes
 
 - `TRACE_CFG` only changes table sizes/history/tag LUTs used by the trace testbench instance.
+- The package defaults are the source of truth for snapshot widths such as
+  `GHR_LEN`, `NUM_TABLES`, `MAX_IDX_WIDTH`, and `MAX_TAG_WIDTH`. If a config
+  needs more tables or wider indices/tags, update `tage_pkg.sv` first.
 - `CORE_LATENCY` changes when prediction and snapshot outputs become valid.
   The wrapper shortens its feedback snapshot pipe by the same amount, so total
   branch resolve alignment remains `PIPELINE_DEPTH`.

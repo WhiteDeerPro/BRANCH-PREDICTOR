@@ -12,13 +12,17 @@ module tage_ram_wr #(
     input  logic [WIDTH-1:0]   i_wr_data,
     // 读端口 (组合输出)
     input  logic [$clog2(DEPTH)-1:0] i_rd_addr,
-    output logic [WIDTH-1:0]   o_rd_data
+    output logic [WIDTH-1:0]   o_rd_data,
+    // 第二读口用于后台 useful-bit aging 扫描。
+    input  logic [$clog2(DEPTH)-1:0] i_age_rd_addr,
+    output logic [WIDTH-1:0]   o_age_rd_data
 );
 
     logic [WIDTH-1:0] mem [DEPTH] = '{default: '0};
 
     // 组合读
     assign o_rd_data = mem[i_rd_addr];
+    assign o_age_rd_data = mem[i_age_rd_addr];
 
     // 时序写
     always_ff @(posedge i_clk) begin

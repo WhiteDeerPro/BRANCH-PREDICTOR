@@ -4,27 +4,63 @@
 
 package tage_pkg;
 
-    parameter int GHR_LEN          = 120;
-    parameter int BIMODAL_SIZE     = 1024;
+    // Default profile: one bimodal base table plus five tagged TAGE tables.
+    // Tagged table order is T1..T5, with monotonically increasing history.
+    parameter int GHR_LEN          = 130;
+    parameter int BIMODAL_SIZE     = 2048;
     parameter int BIMODAL_CTR_W    = 3;      
     parameter int NUM_TABLES       = 5;      
     parameter int TAG_CTR_W        = 3;
     parameter int TAG_USE_W        = 2;
     localparam int ID_WIDTH        = $clog2(NUM_TABLES+1);
-    localparam int MAX_IDX_WIDTH   = 10;
+    localparam int MAX_IDX_WIDTH   = 11;
     localparam int MAX_TAG_WIDTH   = 12;
+    localparam int MAX_TAGGED_ENTRIES = 512;
 
-    // 各表配置 LUT
+    localparam int AGE_MODE_NONE         = 0;
+    localparam int AGE_MODE_TOUCHED_DEC  = 1;
+    localparam int AGE_MODE_GLOBAL_SHIFT = 2;
+
+    localparam int ALLOC_POLICY_FIRST       = 0;
+    localparam int ALLOC_POLICY_LFSR_START  = 1;
+
+`ifdef TAGE_U_AGING_GLOBAL
+    parameter int U_AGING_MODE          = AGE_MODE_GLOBAL_SHIFT;
+`elsif TAGE_U_AGING_NONE
+    parameter int U_AGING_MODE          = AGE_MODE_NONE;
+`else
+    parameter int U_AGING_MODE          = AGE_MODE_TOUCHED_DEC;
+`endif
+    parameter int U_RESET_SCAN_ENTRIES  = MAX_TAGGED_ENTRIES;
+`ifdef TAGE_USE_ALT_ON_NA
+    parameter bit USE_ALT_ON_NA         = 1'b1;
+`else
+    parameter bit USE_ALT_ON_NA         = 1'b0;
+`endif
+    parameter int USE_ALT_CTR_W         = 4;
+    parameter int USE_ALT_CTR_INIT      = 0;
+    parameter bit USE_ALT_REQUIRE_U_ZERO = 1'b1;
+    parameter bit UPDATE_ALT_ON_U_ZERO  = 1'b1;
+`ifdef TAGE_ALLOC_LFSR_START
+    parameter int ALLOC_POLICY          = ALLOC_POLICY_LFSR_START;
+`else
+    parameter int ALLOC_POLICY          = ALLOC_POLICY_FIRST;
+`endif
+    parameter bit ALLOC_FAIL_DEC_U      = 1'b1;
+    parameter int ALLOC_FAIL_TICK_W     = 4;
+
+    // 各 tagged 表配置 LUT，按 T1..T5 自然顺序书写。
+    // Core 中表号越大表示历史越长，用于 provider/alloc 优先级。
     parameter bit [NUM_TABLES*32-1:0] HIST_LENS_LUT = {
-        32'd12, 32'd24, 32'd48, 32'd96, 32'd120
+        32'd6, 32'd13, 32'd27, 32'd56, 32'd130
     };
 
     parameter bit [NUM_TABLES*32-1:0] TABLE_ENTRIES_LUT = {
-        32'd1024, 32'd1024, 32'd1024, 32'd1024, 32'd1024
+        32'd512, 32'd512, 32'd256, 32'd256, 32'd128
     };
 
     parameter bit [NUM_TABLES*8-1:0]  TAG_WIDTH_LUT = {
-        8'd12, 8'd12, 8'd12, 8'd12, 8'd12
+        8'd9, 8'd9, 8'd9, 8'd10, 8'd12
     };
 
     // ========================================================================
@@ -72,6 +108,10 @@ package tage_pkg;
         logic [TAG_CTR_W-1:0]                     alt_ctr;
         logic [MAX_IDX_WIDTH-1:0]                 alt_idx;
         logic [ID_WIDTH-1:0]                      alt_id;
+        logic [NUM_TABLES-1:0][MAX_TAG_WIDTH-1:0] table_tag;
+        logic [NUM_TABLES-1:0][TAG_USE_W-1:0]     table_useful;
+        logic [NUM_TABLES-1:0][TAG_CTR_W-1:0]     table_ctr;
+        logic [NUM_TABLES-1:0][MAX_IDX_WIDTH-1:0] table_idx;
         logic [MAX_TAG_WIDTH-1:0]                 provider_tag;
         logic [TAG_USE_W-1:0]                     provider_useful;
         logic [TAG_CTR_W-1:0]                     provider_ctr;
